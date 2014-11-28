@@ -8,6 +8,8 @@ package me.yuhuan.collections;
 import me.yuhuan.collections.exceptions.MultiValueHashTableLookupFailureException;
 
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -21,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @param <TK>
  * @param <TV>
  */
-public class MultiValueHashTable<TK, TV> {
+public class MultiValueHashTable<TK, TV> implements Iterable<Map.Entry<TK, Tuple2<Integer, ArrayList<TV>>>> {
 
     /**
      * Structure: [Key, [pointer, valueList]]
@@ -32,7 +34,18 @@ public class MultiValueHashTable<TK, TV> {
         _table = new ConcurrentHashMap<TK, Tuple2<Integer, ArrayList<TV>>>();
     }
 
-    public void add(TK key, TV value) {
+    /**
+     * Initializes a multi-value hash table with keys, and empty values.
+     * @param keys The keys.
+     */
+    public MultiValueHashTable(ArrayList<TK> keys) {
+        _table = new ConcurrentHashMap<TK, Tuple2<Integer, ArrayList<TV>>>();
+        for (TK key : keys) {
+            _table.put(key, new Tuple2<Integer, ArrayList<TV>>(0, new ArrayList<TV>()));
+        }
+    }
+
+    public synchronized void add(TK key, TV value) {
         if (_table.containsKey(key)) {
             _table.get(key).item2.add(value);
         }
@@ -43,7 +56,7 @@ public class MultiValueHashTable<TK, TV> {
         }
     }
 
-    public TV get(TK key) throws MultiValueHashTableLookupFailureException {
+    public synchronized TV get(TK key) throws MultiValueHashTableLookupFailureException {
         try {
             if (_table.isEmpty() || _table.size() == 0) {
                 throw new MultiValueHashTableLookupFailureException("Table contains no entry. ");
@@ -63,6 +76,11 @@ public class MultiValueHashTable<TK, TV> {
 
     public boolean containsKey(TK key) {
         return _table.containsKey(key);
+    }
+
+    @Override
+    public Iterator<Map.Entry<TK, Tuple2<Integer, ArrayList<TV>>>> iterator() {
+        return _table.entrySet().iterator();
     }
 
 

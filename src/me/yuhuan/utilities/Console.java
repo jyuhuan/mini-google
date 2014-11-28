@@ -3,7 +3,7 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
-package me.yuhuan.utility;
+package me.yuhuan.utilities;
 
 /**
  * Created by Yuhuan Jiang on 10/16/14.
