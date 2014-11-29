@@ -155,63 +155,10 @@ public class NameServer {
 
     static MiniGoogleNameServerTable _table;
 
-    private static ArrayList<String> generateCategories() {
-        HashMap<String, Integer> sizes = new HashMap<String, Integer>();
-
-        sizes.put("s", 56);
-        sizes.put("c", 50);
-        sizes.put("p", 40);
-        sizes.put("b", 32);
-        sizes.put("d", 31);
-        sizes.put("a", 31);
-        sizes.put("m", 28);
-        sizes.put("t", 27);
-        sizes.put("r", 26);
-        sizes.put("f", 25);
-        sizes.put("e", 22);
-        sizes.put("i", 21);
-        sizes.put("h", 21);
-        sizes.put("l", 19);
-        sizes.put("g", 18);
-        sizes.put("w", 17);
-        sizes.put("u", 15);
-        sizes.put("o", 13);
-        sizes.put("v", 12);
-        sizes.put("n", 11);
-        sizes.put("j", 5);
-        sizes.put("#", 4);
-        sizes.put("k", 4);
-        sizes.put("q", 3);
-        sizes.put("y", 2);
-        sizes.put("x", 2);
-        sizes.put("z", 1);
-
-        ArrayList<String> categories = new ArrayList<String>();
-        for (HashMap.Entry<String, Integer> entry : sizes.entrySet()) {
-            String item = entry.getKey();
-            int count = entry.getValue();
-            for (int i = 0; i < count; i++) {
-                categories.add(item + i);
-            }
-        }
-
-        return categories;
-    }
-
-    private static ArrayList<String> generateSimpleCategories() {
-        ArrayList<String> categories = new ArrayList<String>();
-        categories.add("cat1");
-        categories.add("cat2");
-        categories.add("cat3");
-        categories.add("cat4");
-        categories.add("cat5");
-        return categories;
-    }
-
     public static void main(String[] args) throws IOException {
 
         // Generate a categories
-        ArrayList<String> categories = generateSimpleCategories();
+        ArrayList<String> categories = MiniGoogleUtilities.generateSimpleCategories();
 
         // Create the table with the categories as keys, and value being empty.
         _table = new MiniGoogleNameServerTable(categories);
@@ -253,6 +200,7 @@ public class NameServer {
                 else if (tag == Tags.REQUEST_CATEGORY_HELPER) {
                     // Print who wants to do indexing
                     Console.writeLine("Client " + clientSocket + " requests a helper from any category. ");
+                    (new CategoriedHelperLookupWorker(clientSocket)).start();
                 }
                 else if (tag == Tags.REQUEST_CATEGORYLESS_HELPER) {
                     // Print who wants to do searching
@@ -330,6 +278,45 @@ public class NameServer {
             }
             catch (IOException e) {
                 Console.writeLine("IO error in mapping helper lookup worker. ");
+            }
+            finally {
+                try {
+                    _clientSocket.close();
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
+                }
+                catch (IOException e) {
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
+                }
+            }
+        }
+    }
+
+    private static class CategoriedHelperLookupWorker extends Thread {
+        Socket _clientSocket;
+
+        public CategoriedHelperLookupWorker(Socket clientSocket) {
+            _clientSocket = clientSocket;
+        }
+
+        public void run() {
+            try {
+                TcpMessenger messenger = new TcpMessenger(_clientSocket);
+
+                // Obtain how many mapping helpers the requester wants.
+                int numHelpersReqested = messenger.receiveInt();
+                String category = messenger.receiveString();
+
+                // Borrow that many helpers from the table.
+                ArrayList<ServerInfo> helpers = new ArrayList<ServerInfo>();
+                for (int i = 0; i < numHelpersReqested; i++) {
+                    helpers.add(_table.borrowHelper(category));
+                }
+
+                // Send these helpers to the requester.
+                messenger.sendServerInfoArray(helpers);
+            }
+            catch (IOException e) {
+                Console.writeLine("IO error in categoried helper lookup worker. ");
             }
             finally {
                 try {

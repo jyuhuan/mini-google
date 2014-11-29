@@ -4,6 +4,7 @@
  */
 
 import me.yuhuan.collections.Pair;
+import me.yuhuan.io.Directory;
 import me.yuhuan.io.TextFile;
 import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
@@ -145,7 +146,7 @@ public class Helper {
                 // Inform the master (client) that the work is done
                 //TODO: recover this: messenger.sendTag(Tags.STATUS_INDEXING_MAPPING_SUCCESS);
 
-                Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + ", part ID = " + partId);
+                Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + ", part ID = " + partId + "\n");
             }
             catch (IOException e) {
                 Console.writeLine("IO error in indexing mapping worker. \n");
@@ -160,5 +161,79 @@ public class Helper {
                 }
             }
         }
+    }
+
+    private static class IndexingReducingWorker extends Thread {
+        /**
+         * The TPC socket of the client. Used to talk back to the client.
+         */
+        Socket _clientSocket;
+
+        public IndexingReducingWorker(Socket clientSocket) {
+            _clientSocket = clientSocket;
+        }
+
+        public void run() {
+            try {
+                Console.write("Start indexing reducing. ");
+
+                TcpMessenger messenger = new TcpMessenger(_clientSocket);
+
+                // Obtain the directory that mappers output the partial counts.
+                String mapperOutputDir = messenger.receiveString();
+
+                // Obtain the document name.
+                String documentName = messenger.receiveString();
+
+                // Open all partial count files in the directory.
+                ArrayList<String> pathsToPartialCounts = Directory.getFiles(mapperOutputDir);
+                ArrayList<String[]> partialCounts = new ArrayList<String[]>();
+                for (String path : pathsToPartialCounts) {
+                    partialCounts.add(TextFile.read(path));
+                }
+
+                // Turn all counts to a list of pairs: [Word, Count]
+                ArrayList<Pair<String, Integer>> unmergedCounts = new ArrayList<Pair<String, Integer>>();
+                for (String[] counts : partialCounts) {
+                    for (String line : counts) {
+                        String[] parts = line.split(",");
+                        Pair<String, Integer> pair = new Pair<String, Integer>(parts[0], Integer.parseInt(parts[1]));
+                        unmergedCounts.add(pair);
+                    }
+                }
+
+                // Merge partial counts
+                HashMap<String, Integer> mergedCounts = new HashMap<String, Integer>();
+
+                for (Pair<String, Integer> pair : unmergedCounts) {
+                    String curWord = pair.item1;
+                    int count = mergedCounts.containsKey(curWord) ? mergedCounts.get(curWord) : 0;
+                    mergedCounts.put(curWord, count + pair.item2);
+                }
+
+                HashMap<String, Pair<String, Integer>> currentInvertedIndex = new HashMap<String, Pair<String, Integer>>();
+                for (HashMap.Entry<String, Integer> pair : mergedCounts.entrySet()) {
+                    currentInvertedIndex.put(pair.getKey(), new Pair<String, Integer>(documentName, pair.getValue()));
+                }
+
+                // Merge with the II already in the category.
+
+                Console.writeLine("Finished indexing mapping. \n");
+
+            }
+            catch (IOException e) {
+                Console.writeLine("IO error in indexing reducing worker. \n");
+            }
+            finally {
+                try {
+                    _clientSocket.close();
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
+                }
+                catch (IOException e) {
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
+                }
+            }
+        }
+
     }
 }
