@@ -3,6 +3,8 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
+import me.yuhuan.collections.Pair;
+import me.yuhuan.io.TextFile;
 import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
 import me.yuhuan.net.core.TcpMessenger;
@@ -12,11 +14,17 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 /**
  * Created by Yuhuan Jiang on 11/27/14.
  */
 public class Helper {
+
+    // Configurations
+    static final String MAPPER_OUT_DIR = "working/mappers/";
 
     static String _nameServerIpAddress;
     static int _nameServerPortNumber;
@@ -67,6 +75,7 @@ public class Helper {
                //    (3) Searching
                int tag = messenger.receiveTag();
                if (tag == Tags.REQUEST_INDEXING_MAPPING) {
+                   (new IndexingMappingWorker(clientSocket)).start();
                }
                else if (tag == Tags.REQUEST_INDEXING_REDUCING) {
                }
@@ -78,6 +87,18 @@ public class Helper {
        finally {
            serverSocket.close();
        }
+    }
+
+    private static HashMap<String, Integer> mapping(String[] lines) {
+        HashMap<String, Integer> counts = new HashMap<String, Integer>();
+        for (String line : lines) {
+            String[] words = line.split("\\s+");
+            for (String word : words) {
+                int count = counts.containsKey(word) ? counts.get(word) : 0;
+                counts.put(word, count + 1);
+            }
+        }
+        return counts;
     }
 
     static class IndexingMappingWorker extends Thread {
@@ -92,6 +113,8 @@ public class Helper {
 
         public void run() {
             try {
+                Console.write("Start indexing mapping with ");
+
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
 
                 // Obtain the path to the file segment.
@@ -100,8 +123,29 @@ public class Helper {
                 // Obtain the transaction ID.
                 int transactionId = messenger.receiveInt();
 
+                // Obtain part ID.
+                int partId = messenger.receiveInt();
+
+                Console.writeLine("transaction ID = " + transactionId + ", part ID = " + partId);
 
 
+                // TODO: count words
+                HashMap<String, Integer> counts = mapping(TextFile.read(pathToSeg));
+                ArrayList<String> linesForOutput = new ArrayList<String>();
+                for (HashMap.Entry<String, Integer> pair : counts.entrySet()) {
+                    linesForOutput.add(pair.getKey() + "," + pair.getValue());
+                }
+
+                String[] outputLines = linesForOutput.toArray(new String[linesForOutput.size()]);
+
+                // Save to file
+                String pathToPartialCount = MAPPER_OUT_DIR + transactionId + "/" + partId;
+                TextFile.write(pathToPartialCount, outputLines);
+
+                // Inform the master (client) that the work is done
+                //TODO: recover this: messenger.sendTag(Tags.STATUS_INDEXING_MAPPING_SUCCESS);
+
+                Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + ", part ID = " + partId);
             }
             catch (IOException e) {
                 Console.writeLine("IO error in indexing mapping worker. \n");

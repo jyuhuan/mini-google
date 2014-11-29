@@ -20,4 +20,8 @@ public class Directory {
         }
         return result;
     }
+
+    public static Boolean createDirectory(String pathToDirectory) {
+        return (new File(pathToDirectory)).mkdir();
+    }
 }

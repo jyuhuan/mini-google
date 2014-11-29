@@ -250,17 +250,15 @@ public class NameServer {
                     // Start registration worker
                     (new RegistrationWorker(clientSocket)).start();
                 }
-                else if (tag == Tags.REQUEST_INDEXING) {
+                else if (tag == Tags.REQUEST_CATEGORY_HELPER) {
                     // Print who wants to do indexing
-                    Console.writeLine("Client " + clientSocket + " wants to index a document. ");
-                    // TODO: start indexing master
+                    Console.writeLine("Client " + clientSocket + " requests a helper from any category. ");
                 }
-                else if (tag == Tags.REQUEST_SEARCHING) {
+                else if (tag == Tags.REQUEST_CATEGORYLESS_HELPER) {
                     // Print who wants to do searching
-                    Console.writeLine("Client " + clientSocket + " wants to search for some keywords. ");
-                    // TODO: start searching master
+                    Console.writeLine("Client " + clientSocket + " requests a helper from a certain category. ");
+                    (new CategorylessHelperLookupWorker(clientSocket)).start();
                 }
-
             }
         }
         finally {
@@ -307,10 +305,10 @@ public class NameServer {
         }
     }
 
-    private static class MappingHelperLookupWorker extends Thread {
+    private static class CategorylessHelperLookupWorker extends Thread {
         Socket _clientSocket;
 
-        public MappingHelperLookupWorker(Socket clientSocket) {
+        public CategorylessHelperLookupWorker(Socket clientSocket) {
             _clientSocket = clientSocket;
         }
 
