@@ -20,15 +20,40 @@ import java.util.HashMap;
 /**
  * Created by Yuhuan Jiang on 11/27/14.
  */
+
+/**
+ * A helper in the MapReduce framework. A helper can play three roles, depending on the request.
+ * The three roles are: <ol>
+ *     <li> Mapper helper for indexing </li>
+ *     <li> Reducing helper for indexing </li>
+ *     <li> Searching helper </li>
+ * </ol>
+ */
 public class Helper {
 
+    /**
+     * Represents an inverted index (II) in MapReduce.
+     * Allows loading from and saving to files.
+     * Allows merging with counts for new documents.
+     */
     public static class InvertedIndex {
+
+        /**
+         * [("word", [("doc1", 123), ("doc2", 90), ... ]), ...]
+         */
         HashMap<String, ArrayList<Pair<String, Integer>>> _table;
 
+        /**
+         * Initializes an empty inverted index.
+         */
         public InvertedIndex() {
             _table = new HashMap<String, ArrayList<Pair<String, Integer>>>();
         }
 
+        /**
+         * Initializes the inverted index by loading a file.
+         * @param filePath The path to the II's file.
+         */
         public InvertedIndex(String filePath) throws IOException {
             _table = new HashMap<String, ArrayList<Pair<String, Integer>>>();
             String[] lines = TextFile.read(filePath);
@@ -46,6 +71,11 @@ public class Helper {
             }
         }
 
+        /**
+         * Merge with the counts for a new document.
+         * @param more Counts for the new document.
+         * @param documentName Name of the new document.
+         */
         public void mergeWith(HashMap<String, Integer> more, String documentName) {
             for (HashMap.Entry<String, Integer> pair : more.entrySet()) {
                 String word = pair.getKey();
@@ -62,6 +92,10 @@ public class Helper {
             }
         }
 
+        /**
+         * Saves the inverted index to a text file.
+         * @param filePath Where to save.
+         */
         public void saveToFile(String filePath) throws IOException{
             ArrayList<String> lines = new ArrayList<String>();
             for (HashMap.Entry<String, ArrayList<Pair<String, Integer>>> pair : _table.entrySet()) {
@@ -84,9 +118,10 @@ public class Helper {
         }
     }
 
-    // Configurations
+    //region HELPER CONFIGURATIONS
     static final String MAPPER_OUT_DIR = "working/mappers/";
     static final String REDUCER_DIR = "working/reducers/";
+    //endregion
 
     static String _nameServerIpAddress;
     static int _nameServerPortNumber;
@@ -98,6 +133,11 @@ public class Helper {
 
     static InvertedIndex _invertedIndex;
 
+    /**
+     * Registers this helper to the name server, and obtains the category assigned by the name server.
+     * @return The category assigned by the name server.
+     * @throws IOException
+     */
     static String register() throws IOException {
         Console.writeLine("Registering myself... ");
         Socket socketToNameServer = new Socket(_nameServerIpAddress, _nameServerPortNumber);
@@ -206,7 +246,7 @@ public class Helper {
                 TextFile.write(pathToPartialCount, outputLines);
 
                 // Inform the master (client) that the work is done
-                //TODO: recover this: messenger.sendTag(Tags.STATUS_INDEXING_MAPPING_SUCCESS);
+                messenger.sendTag(Tags.STATUS_INDEXING_MAPPING_SUCCESS);
 
                 Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + ", part ID = " + partId + "\n");
             } catch (IOException e) {

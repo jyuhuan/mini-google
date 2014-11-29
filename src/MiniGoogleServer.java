@@ -4,6 +4,7 @@
  */
 
 import me.yuhuan.io.Directory;
+import me.yuhuan.net.core.ServerInfo;
 import me.yuhuan.net.core.TcpMessenger;
 import me.yuhuan.utilities.Console;
 
@@ -12,13 +13,43 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by Yuhuan Jiang on 11/24/14.
  */
 public class MiniGoogleServer {
 
+    public static class HelperMonitor {
+        /**
+         * [(Server1, [Executing=0|Done=1|Dead=-1]), ...]
+         */
+        volatile ConcurrentHashMap<ServerInfo, Integer> _table;
+
+        public HelperMonitor() {
+            _table = new ConcurrentHashMap<ServerInfo, Integer>();
+        }
+
+        public synchronized void addNewHelper(ServerInfo serverInfo, int status) {
+            if (!_table.containsKey(serverInfo)) _table.put(serverInfo, status);
+        }
+
+        public synchronized void changeStatus(ServerInfo serverInfo, int status) {
+            _table.put(serverInfo, status);
+        }
+
+        public synchronized Boolean allHelpersDone() {
+            for (Map.Entry<ServerInfo, Integer> pair : _table.entrySet()) {
+                if (pair.getValue() == 0) return false;
+            }
+            return true;
+        }
+    }
+
     // Configuration of the server
+    static final String MAPPER_OUT_DIR = "working/mappers/";
+    static final String REDUCER_DIR = "working/reducers/";
 
 
 
@@ -58,6 +89,12 @@ public class MiniGoogleServer {
         }
     }
 
+    static class HelperStatusMaintainer extends Thread {
+        public void run() {
+
+        }
+    }
+
     static class IndexingMaster extends Thread {
         Socket _clientSocket;
 
@@ -67,23 +104,45 @@ public class MiniGoogleServer {
 
         public void run() {
             try {
-                TcpMessenger messenger = new TcpMessenger(_clientSocket);
-                String pathToSegmentDirectory = messenger.receiveString();
-                int transactionId = messenger.receiveInt();
+                // 0. Create a messenger to the client (the one who sent the indexing request)
+                TcpMessenger messengerToRequester = new TcpMessenger(_clientSocket);
+                String pathToSegmentDirectory = messengerToRequester.receiveString();
+                int transactionId = messengerToRequester.receiveInt();
 
-                // Phase I: Mapping
-                // 1. Count number of files, N.
+                // 1. Create directory for the mappers to output to.
+                Directory.createDirectory(MAPPER_OUT_DIR + transactionId);
+
+                // 2. Count segments.
                 ArrayList<String> pathsToSegments = Directory.getFiles(pathToSegmentDirectory);
-                int numSegments = pathsToSegments.size();
+                int numHelpersNeeded = pathsToSegments.size();;
 
-                // 2. Apply for N mapping helpers from the name server.
+                // 3. Contact name server, and borrow that many helpers.
+                Socket socketToNameServer = new Socket("127.0.0.1", 12345);
+                TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
+                messengerToNameServer.sendTag(Tags.REQUEST_CATEGORYLESS_HELPER);
+                messengerToNameServer.sendInt(numHelpersNeeded);
+                ArrayList<ServerInfo> helpers = messengerToNameServer.receiveServerInfoArray();
+
+                // 4. Send each segment to one helper, and request mapping.
+                for (int i = 0; i < numHelpersNeeded; i++) {
+                    ServerInfo curHelper = helpers.get(i);
+                    Socket socketToCurHelper = new Socket(curHelper.IPAddressString(), curHelper.portNumber);
+                    TcpMessenger messengerToCurHelper = new TcpMessenger(socketToCurHelper);
+
+                    // Send request indexing mapping to helper.
+                    messengerToCurHelper.sendTag(Tags.REQUEST_INDEXING_MAPPING);
+
+                    // Send path to current segment to helper.
+                    messengerToCurHelper.sendString(pathsToSegments.get(i));
+
+                    // Send transaction ID to helper.
+                    messengerToCurHelper.sendInt(transactionId);
+
+                    // Send part ID to helper.
+                    messengerToCurHelper.sendInt(i);
+                }
 
 
-                // 3. Request indexing mapping on each helpers for each segment.
-
-
-                // Phrase II: Reducing
-                // TODO:
 
             }
             catch (IOException e) {
