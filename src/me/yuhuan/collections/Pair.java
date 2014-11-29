@@ -8,12 +8,12 @@ package me.yuhuan.collections;
 /**
  * Created by Yuhuan Jiang on 10/18/14.
  */
-public class Tuple2<T1, T2> {
+public class Pair<T1, T2> {
 
     public T1 item1;
     public T2 item2;
 
-    public Tuple2(T1 item1, T2 item2) {
+    public Pair(T1 item1, T2 item2) {
         this.item1 = item1;
         this.item2 = item2;
     }
@@ -26,9 +26,14 @@ public class Tuple2<T1, T2> {
         return hashCode;
     }
 
+    /**
+     * Compares the corresponding items in both pairs.
+     * @param that
+     * @return
+     */
     @Override
     public boolean equals(Object that) {
-        Tuple2<T1, T2> thatTuple = (Tuple2<T1, T2>)that;
+        Pair<T1, T2> thatTuple = (Pair<T1, T2>)that;
         return this.item1.equals(thatTuple.item1) &&
                 this.item2.equals(thatTuple.item2);
     }

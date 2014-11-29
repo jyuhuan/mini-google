@@ -23,15 +23,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * @param <TK>
  * @param <TV>
  */
-public class MultiValueHashTable<TK, TV> implements Iterable<Map.Entry<TK, Tuple2<Integer, ArrayList<TV>>>> {
+public class MultiValueHashTable<TK, TV> implements Iterable<Map.Entry<TK, Pair<Integer, ArrayList<TV>>>> {
 
     /**
      * Structure: [Key, [pointer, valueList]]
      */
-    volatile ConcurrentHashMap<TK, Tuple2<Integer, ArrayList<TV>>> _table;
+    volatile ConcurrentHashMap<TK, Pair<Integer, ArrayList<TV>>> _table;
 
     public MultiValueHashTable() {
-        _table = new ConcurrentHashMap<TK, Tuple2<Integer, ArrayList<TV>>>();
+        _table = new ConcurrentHashMap<TK, Pair<Integer, ArrayList<TV>>>();
     }
 
     /**
@@ -39,9 +39,9 @@ public class MultiValueHashTable<TK, TV> implements Iterable<Map.Entry<TK, Tuple
      * @param keys The keys.
      */
     public MultiValueHashTable(ArrayList<TK> keys) {
-        _table = new ConcurrentHashMap<TK, Tuple2<Integer, ArrayList<TV>>>();
+        _table = new ConcurrentHashMap<TK, Pair<Integer, ArrayList<TV>>>();
         for (TK key : keys) {
-            _table.put(key, new Tuple2<Integer, ArrayList<TV>>(0, new ArrayList<TV>()));
+            _table.put(key, new Pair<Integer, ArrayList<TV>>(0, new ArrayList<TV>()));
         }
     }
 
@@ -52,7 +52,7 @@ public class MultiValueHashTable<TK, TV> implements Iterable<Map.Entry<TK, Tuple
         else {
             ArrayList<TV> values = new ArrayList<TV>();
             values.add(value);
-            _table.put(key, new Tuple2<Integer, ArrayList<TV> >(0, values));
+            _table.put(key, new Pair<Integer, ArrayList<TV> >(0, values));
         }
     }
 
@@ -79,7 +79,7 @@ public class MultiValueHashTable<TK, TV> implements Iterable<Map.Entry<TK, Tuple
     }
 
     @Override
-    public Iterator<Map.Entry<TK, Tuple2<Integer, ArrayList<TV>>>> iterator() {
+    public Iterator<Map.Entry<TK, Pair<Integer, ArrayList<TV>>>> iterator() {
         return _table.entrySet().iterator();
     }
 

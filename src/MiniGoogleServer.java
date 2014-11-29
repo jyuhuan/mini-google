@@ -3,6 +3,7 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
+import me.yuhuan.io.Directory;
 import me.yuhuan.net.core.TcpMessenger;
 import me.yuhuan.utilities.Console;
 
@@ -10,6 +11,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 
 /**
  * Created by Yuhuan Jiang on 11/24/14.
@@ -66,12 +68,17 @@ public class MiniGoogleServer {
         public void run() {
             try {
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
-                String pathToSegments = messenger.receiveString();
+                String pathToSegmentDirectory = messenger.receiveString();
                 int transactionId = messenger.receiveInt();
 
                 // Phase I: Mapping
                 // 1. Count number of files, N.
+                ArrayList<String> pathsToSegments = Directory.getFiles(pathToSegmentDirectory);
+                int numSegments = pathsToSegments.size();
+
                 // 2. Apply for N mapping helpers from the name server.
+
+
                 // 3. Request indexing mapping on each helpers for each segment.
 
 

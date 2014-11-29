@@ -4,7 +4,7 @@
  */
 
 import me.yuhuan.collections.MultiValueHashTable;
-import me.yuhuan.collections.Tuple2;
+import me.yuhuan.collections.Pair;
 import me.yuhuan.io.TextFile;
 import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
@@ -17,12 +17,135 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by Yuhuan Jiang on 11/24/14.
  */
 public class NameServer {
-    static MultiValueHashTable<String, ServerInfo> _map;
+
+    public static class MiniGoogleNameServerTable {
+        volatile ConcurrentHashMap<String, ArrayList<Pair<ServerInfo, Integer>>> _table;
+
+        public MiniGoogleNameServerTable(ArrayList<String> keys) {
+            _table = new ConcurrentHashMap<String, ArrayList<Pair<ServerInfo, Integer>>>();
+            for (String key : keys) {
+                _table.put(key, new ArrayList<Pair<ServerInfo, Integer>>());
+            }
+        }
+
+        /**
+         * Gets the next category according to some standard. Currently, it returns the category
+         * that has the least number of helpers.
+         * @return The category that has the least number of helpers.
+         */
+        private String getNextCategory() {
+            int minNumHelpers = Integer.MAX_VALUE;
+            String categoryThatHasMinNumHelpers = "";
+            for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
+                int curNumHelpers = entry.getValue().size();
+                if (curNumHelpers < minNumHelpers) {
+                    minNumHelpers = curNumHelpers;
+                    categoryThatHasMinNumHelpers = entry.getKey();
+                }
+            }
+            return categoryThatHasMinNumHelpers;
+        }
+
+        public void add(ServerInfo serverInfo) {
+            String categoryToAddFor = getNextCategory();
+
+            // A server to be added should be a server that is just launched, with 0 threads running.
+            _table.get(categoryToAddFor).add(new Pair<ServerInfo, Integer>(serverInfo, 0));
+        }
+
+        private void increaseLoadOn(ServerInfo serverInfo) {
+            for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
+                for (Pair<ServerInfo, Integer> pair : entry.getValue()) {
+                    if (pair.item1.equals(serverInfo)) {
+                        pair.item2++;
+                    }
+                }
+            }
+        }
+
+        private void increaseLoadOn(ServerInfo serverInfo, String category) {
+            for (Pair<ServerInfo, Integer> pair : _table.get(category)) {
+                if (pair.item1.equals(serverInfo)) {
+                    pair.item2++;
+                }
+            }
+        }
+
+        private void decreaseLoadOn(ServerInfo serverInfo) {
+            for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
+                for (Pair<ServerInfo, Integer> pair : entry.getValue()) {
+                    if (pair.item1.equals(serverInfo)) {
+                        pair.item2--;
+                    }
+                }
+            }
+        }
+
+        private void decreaseLoadOn(ServerInfo serverInfo, String category) {
+            for (Pair<ServerInfo, Integer> pair : _table.get(category)) {
+                if (pair.item1.equals(serverInfo)) {
+                    pair.item2--;
+                }
+            }
+        }
+
+        /**
+         * Gets a server that is the least busy.
+         */
+        public ServerInfo borrowServer() {
+            int lowestLoad = Integer.MAX_VALUE;
+            ServerInfo mostIdle = null;
+            for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
+                for (Pair<ServerInfo, Integer> pair : entry.getValue()) {
+                    ServerInfo serverInfo = pair.item1;
+                    int load = pair.item2;
+                    if (load < lowestLoad) {
+                        lowestLoad = load;
+                        mostIdle = serverInfo;
+                    }
+                }
+            }
+            increaseLoadOn(mostIdle);
+            return mostIdle;
+        }
+
+        public void returnServer(ServerInfo serverInfo) {
+            decreaseLoadOn(serverInfo);
+        }
+
+        /**
+         * Gets a server in a category that is the least busy.
+         * @param category A category to search a server for.
+         * @return A server in the specified category that is the least busy.
+         */
+        public ServerInfo borrowServer(String category) {
+            int lowestLoad = Integer.MAX_VALUE;
+            ServerInfo mostIdle = null;
+            for (Pair<ServerInfo, Integer> pair : _table.get(category)) {
+                ServerInfo serverInfo = pair.item1;
+                int load = pair.item2;
+                if (load < lowestLoad) {
+                    lowestLoad = load;
+                    mostIdle = serverInfo;
+                }
+            }
+            increaseLoadOn(mostIdle, category);
+            return mostIdle;
+        }
+
+        public void returnServer(ServerInfo serverInfo, String category) {
+            decreaseLoadOn(serverInfo, category);
+        }
+    }
+
+
+    static MultiValueHashTable<String, Pair<ServerInfo, Boolean>> _map;
 
     private static ArrayList<String> generateCategories() {
         HashMap<String, Integer> sizes = new HashMap<String, Integer>();
@@ -89,7 +212,7 @@ public class NameServer {
         ArrayList<String> categories = generateSimpleCategories();
 
         // Create the table with the categories as keys, and value being empty.
-        _map = new MultiValueHashTable<String, ServerInfo>(categories);
+        _map = new MultiValueHashTable<String, Pair<ServerInfo, Boolean>>(categories);
 
         // A socket that listens to incoming requests on a system-allocated port number.
         ServerSocket serverSocket = new ServerSocket(12345); // TODO: change to 0
@@ -125,7 +248,7 @@ public class NameServer {
                     Console.writeLine("Helper " + clientSocket + " wants to register. ");
 
                     // Start registration worker
-                    (new RegistrationWorker(clientSocket)).start();
+                    //(new RegistrationWorker(clientSocket)).start();
                 }
                 else if (tag == Tags.REQUEST_INDEXING) {
                     // Print who wants to do indexing
@@ -148,7 +271,7 @@ public class NameServer {
     /**
      * A worker that registers a helper in the table of name server.
      */
-    private static class RegistrationWorker extends Thread {
+    /*private static class RegistrationWorker extends Thread {
         Socket _clientSocket;
 
         public RegistrationWorker(Socket clientSocket) {
@@ -161,7 +284,7 @@ public class NameServer {
                 ServerInfo serverInfo = messenger.receiveServerInfo();
 
                 String categoryAssigned = MiniGoogleUtilities.getNextCategoryToRegisterForInTable(_map);
-                _map.add(categoryAssigned, serverInfo);
+                _map.add(categoryAssigned, new Tuple2<ServerInfo, Boolean>(serverInfo, false));
 
                 messenger.sendString(categoryAssigned);
                 Console.writeLine(_clientSocket.getInetAddress().getHostAddress() + " at " + _clientSocket.getPort() + " is registered and assigned category " + categoryAssigned);
@@ -179,6 +302,39 @@ public class NameServer {
                 }
             }
         }
+    }*/
+
+    private static class MappingHelperLookupWorker extends Thread {
+        Socket _clientSocket;
+
+        public MappingHelperLookupWorker(Socket clientSocket) {
+            _clientSocket = clientSocket;
+        }
+
+        public void run() {
+            try {
+                TcpMessenger messenger = new TcpMessenger(_clientSocket);
+
+                // Obtain how many mapping helpers the requester wants
+                int numHelpersReqested = messenger.receiveInt();
+
+
+
+            }
+            catch (IOException e) {
+                Console.writeLine("IO error in registration worker. ");
+            }
+            finally {
+                try {
+                    _clientSocket.close();
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
+                }
+                catch (IOException e) {
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
+                }
+            }
+        }
     }
+
 
 }

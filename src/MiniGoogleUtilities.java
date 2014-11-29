@@ -4,7 +4,7 @@
  */
 
 import me.yuhuan.collections.MultiValueHashTable;
-import me.yuhuan.collections.Tuple2;
+import me.yuhuan.collections.Pair;
 import me.yuhuan.net.core.ServerInfo;
 
 import java.util.ArrayList;
@@ -22,20 +22,24 @@ public class MiniGoogleUtilities {
         return hashCode;
     }
 
-    public synchronized static String getNextCategoryToRegisterForInTable(MultiValueHashTable<String, ServerInfo> table) {
+    public synchronized static String getNextCategoryToRegisterForInTable(MultiValueHashTable<String, Pair<ServerInfo, Integer>> table) {
         int minNumHelpers = Integer.MAX_VALUE;
         String categoryThatHasMinNumHelpers = "";
-
-        for (Map.Entry<String, Tuple2<Integer, ArrayList<ServerInfo>>> entry : table) {
+        for (Map.Entry<String, Pair<Integer, ArrayList<Pair<ServerInfo, Integer>>>> entry : table) {
             int curNumHelpers = entry.getValue().item2.size();
             if (curNumHelpers < minNumHelpers) {
                 minNumHelpers = curNumHelpers;
                 categoryThatHasMinNumHelpers = entry.getKey();
             }
         }
-
         return categoryThatHasMinNumHelpers;
     }
 
+    public synchronized static ServerInfo getMappingHelper(MultiValueHashTable<String, Pair<ServerInfo, Integer>> table) {
+        for (Map.Entry<String, Pair<Integer, ArrayList<Pair<ServerInfo, Integer>>>> entry : table) {
+            //ArrayList<Pair<ServerInfo, Integer>> servers = entry.getValue()
+        }
+        return null;
+    }
 
 }
