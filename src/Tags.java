@@ -16,4 +16,5 @@ public class Tags {
     public static final int REQUEST_SEARCHING = 7;
 
     public static final int STATUS_INDEXING_MAPPING_SUCCESS = 8;
+    public static final int STATUS_INDEXING_REDUCING_SUCCESS = 9;
 }

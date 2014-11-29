@@ -20,6 +20,14 @@ public class TextFile {
         writer.close();
     }
 
+    public static void write(String path, ArrayList<String> lines) throws UnsupportedEncodingException, FileNotFoundException {
+        PrintWriter writer = new PrintWriter(path, "UTF-8");
+        for (String line : lines) {
+            writer.println(line);
+        }
+        writer.close();
+    }
+
     public static String[] read(String path) throws IOException {
         ArrayList<String> lines = new ArrayList<String>();
         BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(new File(path)), "UTF8"));

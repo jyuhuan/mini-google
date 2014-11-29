@@ -12,20 +12,81 @@ import me.yuhuan.net.core.TcpMessenger;
 import me.yuhuan.utilities.Console;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 
 /**
  * Created by Yuhuan Jiang on 11/27/14.
  */
 public class Helper {
 
+    public static class InvertedIndex {
+        HashMap<String, ArrayList<Pair<String, Integer>>> _table;
+
+        public InvertedIndex() {
+            _table = new HashMap<String, ArrayList<Pair<String, Integer>>>();
+        }
+
+        public InvertedIndex(String filePath) throws IOException {
+            _table = new HashMap<String, ArrayList<Pair<String, Integer>>>();
+            String[] lines = TextFile.read(filePath);
+            for (String line : lines) {
+                String[] parts = line.split(",");
+                String word = parts[0];
+                ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
+                for (int i = 1; i < parts.length; i++) {
+                    String[] docIdAndCount = parts[i].split("\\|");
+                    String docId = docIdAndCount[0];
+                    int count = Integer.parseInt(docIdAndCount[1]);
+                    postings.add(new Pair<String, Integer>(docId, count));
+                }
+                _table.put(word, postings);
+            }
+        }
+
+        public void mergeWith(HashMap<String, Integer> more, String documentName) {
+            for (HashMap.Entry<String, Integer> pair : more.entrySet()) {
+                String word = pair.getKey();
+                int count = pair.getValue();
+
+                if (_table.containsKey(word)) {
+                    _table.get(word).add(new Pair<String, Integer>(documentName, count));
+                }
+                else {
+                    ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
+                    postings.add(new Pair<String, Integer>(documentName, count));
+                    _table.put(word, postings);
+                }
+            }
+        }
+
+        public void saveToFile(String filePath) throws IOException{
+            ArrayList<String> lines = new ArrayList<String>();
+            for (HashMap.Entry<String, ArrayList<Pair<String, Integer>>> pair : _table.entrySet()) {
+                String word = pair.getKey();
+                ArrayList<Pair<String, Integer>> postings = pair.getValue();
+
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append(word);
+                stringBuilder.append(",");
+                for (Pair<String, Integer> posting : postings) {
+                    stringBuilder.append(posting.item1);
+                    stringBuilder.append("|");
+                    stringBuilder.append(posting.item2);
+                    stringBuilder.append(",");
+                }
+                String postingsString = stringBuilder.substring(0, stringBuilder.length() - 1);
+                lines.add(postingsString);
+            }
+            TextFile.write(filePath, lines);
+        }
+    }
+
     // Configurations
     static final String MAPPER_OUT_DIR = "working/mappers/";
+    static final String REDUCER_DIR = "working/reducers/";
 
     static String _nameServerIpAddress;
     static int _nameServerPortNumber;
@@ -34,6 +95,8 @@ public class Helper {
     static int _myPortNumber;
 
     static String _category;
+
+    static InvertedIndex _invertedIndex;
 
     static String register() throws IOException {
         Console.writeLine("Registering myself... ");
@@ -60,34 +123,33 @@ public class Helper {
 
         _category = register();
 
-        // TODO: Load the partial II file for _category, if there is
+        // Load the partial II file for _category, if there is
+        _invertedIndex = new InvertedIndex(REDUCER_DIR + _category);
 
-       try {
-           while (true) {
-               // Obtain the client's TCP socket.
-               Socket clientSocket = serverSocket.accept();
+        try {
+            while (true) {
+                // Obtain the client's TCP socket.
+                Socket clientSocket = serverSocket.accept();
 
-               // Create IO wrapper for the client's socket.
-               TcpMessenger messenger = new TcpMessenger(clientSocket);
+                // Create IO wrapper for the client's socket.
+                TcpMessenger messenger = new TcpMessenger(clientSocket);
 
-               // Determine the type of request. Possible types are:
-               //    (1) Indexing mapping
-               //    (2) Indexing reducing
-               //    (3) Searching
-               int tag = messenger.receiveTag();
-               if (tag == Tags.REQUEST_INDEXING_MAPPING) {
-                   (new IndexingMappingWorker(clientSocket)).start();
-               }
-               else if (tag == Tags.REQUEST_INDEXING_REDUCING) {
-               }
-               else if (tag == Tags.REQUEST_SEARCHING) {
-               }
+                // Determine the type of request. Possible types are:
+                //    (1) Indexing mapping
+                //    (2) Indexing reducing
+                //    (3) Searching
+                int tag = messenger.receiveTag();
+                if (tag == Tags.REQUEST_INDEXING_MAPPING) {
+                    (new IndexingMappingWorker(clientSocket)).start();
+                } else if (tag == Tags.REQUEST_INDEXING_REDUCING) {
+                    (new IndexingReducingWorker(clientSocket)).start();
+                } else if (tag == Tags.REQUEST_SEARCHING) {
+                }
 
-           }
-       }
-       finally {
-           serverSocket.close();
-       }
+            }
+        } finally {
+            serverSocket.close();
+        }
     }
 
     private static HashMap<String, Integer> mapping(String[] lines) {
@@ -147,16 +209,13 @@ public class Helper {
                 //TODO: recover this: messenger.sendTag(Tags.STATUS_INDEXING_MAPPING_SUCCESS);
 
                 Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + ", part ID = " + partId + "\n");
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 Console.writeLine("IO error in indexing mapping worker. \n");
-            }
-            finally {
+            } finally {
                 try {
                     _clientSocket.close();
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
                 }
             }
@@ -203,33 +262,32 @@ public class Helper {
                 }
 
                 // Merge partial counts
-                HashMap<String, Integer> mergedCounts = new HashMap<String, Integer>();
+                HashMap<String, Integer> combinedCounts = new HashMap<String, Integer>();
 
                 for (Pair<String, Integer> pair : unmergedCounts) {
                     String curWord = pair.item1;
-                    int count = mergedCounts.containsKey(curWord) ? mergedCounts.get(curWord) : 0;
-                    mergedCounts.put(curWord, count + pair.item2);
+                    int count = combinedCounts.containsKey(curWord) ? combinedCounts.get(curWord) : 0;
+                    combinedCounts.put(curWord, count + pair.item2);
                 }
 
-                HashMap<String, Pair<String, Integer>> currentInvertedIndex = new HashMap<String, Pair<String, Integer>>();
-                for (HashMap.Entry<String, Integer> pair : mergedCounts.entrySet()) {
-                    currentInvertedIndex.put(pair.getKey(), new Pair<String, Integer>(documentName, pair.getValue()));
-                }
+                // Merge combinedCounts with _invertedIndex, the II already calculated for this category.
+                _invertedIndex.mergeWith(combinedCounts, documentName);
 
-                // Merge with the II already in the category.
+                // Write _invertedIndex to file.
+                _invertedIndex.saveToFile(REDUCER_DIR + _category);
+
+                // Inform the master
+                messenger.sendTag(Tags.STATUS_INDEXING_REDUCING_SUCCESS);
 
                 Console.writeLine("Finished indexing mapping. \n");
 
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 Console.writeLine("IO error in indexing reducing worker. \n");
-            }
-            finally {
+            } finally {
                 try {
                     _clientSocket.close();
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
                 }
             }
