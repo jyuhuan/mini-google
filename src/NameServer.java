@@ -24,6 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class NameServer {
 
+    // Configurations
+    private static final int PORT_NUMBER = 12345; // TODO: change to 0
+
     public static class MiniGoogleNameServerTable {
         volatile ConcurrentHashMap<String, ArrayList<Pair<ServerInfo, Integer>>> _table;
 
@@ -52,14 +55,17 @@ public class NameServer {
             return categoryThatHasMinNumHelpers;
         }
 
-        public void add(ServerInfo serverInfo) {
+        public synchronized String addHelper(ServerInfo serverInfo) {
             String categoryToAddFor = getNextCategory();
 
             // A server to be added should be a server that is just launched, with 0 threads running.
             _table.get(categoryToAddFor).add(new Pair<ServerInfo, Integer>(serverInfo, 0));
+            return categoryToAddFor;
         }
 
-        private void increaseLoadOn(ServerInfo serverInfo) {
+        //region Server Load Managing
+
+        private synchronized void increaseLoadOn(ServerInfo serverInfo) {
             for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
                 for (Pair<ServerInfo, Integer> pair : entry.getValue()) {
                     if (pair.item1.equals(serverInfo)) {
@@ -69,7 +75,7 @@ public class NameServer {
             }
         }
 
-        private void increaseLoadOn(ServerInfo serverInfo, String category) {
+        private synchronized void increaseLoadOn(ServerInfo serverInfo, String category) {
             for (Pair<ServerInfo, Integer> pair : _table.get(category)) {
                 if (pair.item1.equals(serverInfo)) {
                     pair.item2++;
@@ -77,7 +83,7 @@ public class NameServer {
             }
         }
 
-        private void decreaseLoadOn(ServerInfo serverInfo) {
+        private synchronized void decreaseLoadOn(ServerInfo serverInfo) {
             for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
                 for (Pair<ServerInfo, Integer> pair : entry.getValue()) {
                     if (pair.item1.equals(serverInfo)) {
@@ -87,7 +93,7 @@ public class NameServer {
             }
         }
 
-        private void decreaseLoadOn(ServerInfo serverInfo, String category) {
+        private synchronized void decreaseLoadOn(ServerInfo serverInfo, String category) {
             for (Pair<ServerInfo, Integer> pair : _table.get(category)) {
                 if (pair.item1.equals(serverInfo)) {
                     pair.item2--;
@@ -95,10 +101,12 @@ public class NameServer {
             }
         }
 
+        //endregion
+
         /**
          * Gets a server that is the least busy.
          */
-        public ServerInfo borrowServer() {
+        public synchronized ServerInfo  borrowHelper() {
             int lowestLoad = Integer.MAX_VALUE;
             ServerInfo mostIdle = null;
             for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
@@ -115,7 +123,7 @@ public class NameServer {
             return mostIdle;
         }
 
-        public void returnServer(ServerInfo serverInfo) {
+        public synchronized void returnHelper(ServerInfo serverInfo) {
             decreaseLoadOn(serverInfo);
         }
 
@@ -124,7 +132,7 @@ public class NameServer {
          * @param category A category to search a server for.
          * @return A server in the specified category that is the least busy.
          */
-        public ServerInfo borrowServer(String category) {
+        public synchronized ServerInfo borrowHelper(String category) {
             int lowestLoad = Integer.MAX_VALUE;
             ServerInfo mostIdle = null;
             for (Pair<ServerInfo, Integer> pair : _table.get(category)) {
@@ -139,13 +147,13 @@ public class NameServer {
             return mostIdle;
         }
 
-        public void returnServer(ServerInfo serverInfo, String category) {
+        public synchronized void returnHelper(ServerInfo serverInfo, String category) {
             decreaseLoadOn(serverInfo, category);
         }
     }
 
 
-    static MultiValueHashTable<String, Pair<ServerInfo, Boolean>> _map;
+    static MiniGoogleNameServerTable _table;
 
     private static ArrayList<String> generateCategories() {
         HashMap<String, Integer> sizes = new HashMap<String, Integer>();
@@ -192,30 +200,24 @@ public class NameServer {
 
     private static ArrayList<String> generateSimpleCategories() {
         ArrayList<String> categories = new ArrayList<String>();
-        categories.add("c1");
-        categories.add("c2");
-        categories.add("c3");
-        categories.add("c4");
-        categories.add("c5");
+        categories.add("cat1");
+        categories.add("cat2");
+        categories.add("cat3");
+        categories.add("cat4");
+        categories.add("cat5");
         return categories;
     }
 
     public static void main(String[] args) throws IOException {
 
-        // Every time the name server starts, the map is created as follows:
-        //    s1 => (Empty list)
-        //    s2 => (Empty list)
-        //    ...
-        //    z1 => (Empty list)
-
         // Generate a categories
         ArrayList<String> categories = generateSimpleCategories();
 
         // Create the table with the categories as keys, and value being empty.
-        _map = new MultiValueHashTable<String, Pair<ServerInfo, Boolean>>(categories);
+        _table = new MiniGoogleNameServerTable(categories);
 
         // A socket that listens to incoming requests on a system-allocated port number.
-        ServerSocket serverSocket = new ServerSocket(12345); // TODO: change to 0
+        ServerSocket serverSocket = new ServerSocket(PORT_NUMBER);
 
         // Figure out the IP address and port number of this name server.
         String myIpAddress = Utilities.getMyIpAddress();
@@ -229,8 +231,6 @@ public class NameServer {
         // TODO: start the "I'm Alive" worker here.
 
         try {
-
-
             while (true) {
                 // Get the client's TCP socket.
                 Socket clientSocket = serverSocket.accept();
@@ -248,7 +248,7 @@ public class NameServer {
                     Console.writeLine("Helper " + clientSocket + " wants to register. ");
 
                     // Start registration worker
-                    //(new RegistrationWorker(clientSocket)).start();
+                    (new RegistrationWorker(clientSocket)).start();
                 }
                 else if (tag == Tags.REQUEST_INDEXING) {
                     // Print who wants to do indexing
@@ -271,7 +271,7 @@ public class NameServer {
     /**
      * A worker that registers a helper in the table of name server.
      */
-    /*private static class RegistrationWorker extends Thread {
+    private static class RegistrationWorker extends Thread {
         Socket _clientSocket;
 
         public RegistrationWorker(Socket clientSocket) {
@@ -281,12 +281,15 @@ public class NameServer {
         public void run() {
             try {
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
+
+                // Obtain the helper to be registered, and add it.
                 ServerInfo serverInfo = messenger.receiveServerInfo();
+                String categoryAssigned = _table.addHelper(serverInfo);
 
-                String categoryAssigned = MiniGoogleUtilities.getNextCategoryToRegisterForInTable(_map);
-                _map.add(categoryAssigned, new Tuple2<ServerInfo, Boolean>(serverInfo, false));
-
+                // Inform the helper which category it is responsible for.
                 messenger.sendString(categoryAssigned);
+
+                // Print the registration on terminal.
                 Console.writeLine(_clientSocket.getInetAddress().getHostAddress() + " at " + _clientSocket.getPort() + " is registered and assigned category " + categoryAssigned);
             }
             catch (IOException e) {
@@ -302,7 +305,7 @@ public class NameServer {
                 }
             }
         }
-    }*/
+    }
 
     private static class MappingHelperLookupWorker extends Thread {
         Socket _clientSocket;
@@ -315,14 +318,20 @@ public class NameServer {
             try {
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
 
-                // Obtain how many mapping helpers the requester wants
+                // Obtain how many mapping helpers the requester wants.
                 int numHelpersReqested = messenger.receiveInt();
 
+                // Borrow that many helpers from the table.
+                ArrayList<ServerInfo> helpers = new ArrayList<ServerInfo>();
+                for (int i = 0; i < numHelpersReqested; i++) {
+                    helpers.add(_table.borrowHelper());
+                }
 
-
+                // Send these helpers to the requester.
+                messenger.sendServerInfoArray(helpers);
             }
             catch (IOException e) {
-                Console.writeLine("IO error in registration worker. ");
+                Console.writeLine("IO error in mapping helper lookup worker. ");
             }
             finally {
                 try {

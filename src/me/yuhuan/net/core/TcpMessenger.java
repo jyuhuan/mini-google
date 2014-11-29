@@ -24,6 +24,7 @@ import me.yuhuan.net.core.ServerInfo;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
 
 /**
  * Created by Yuhuan Jiang on 10/20/14.
@@ -75,6 +76,22 @@ public class TcpMessenger {
             ipAddress[i] = _i.readInt();
         }
         return new ServerInfo(ipAddress, _i.readInt());
+    }
+
+    public void sendServerInfoArray(ArrayList<ServerInfo> serverInfoArray) throws IOException {
+        sendInt(serverInfoArray.size());
+        for (ServerInfo serverInfo : serverInfoArray) {
+            sendServerInfo(serverInfo);
+        }
+    }
+
+    public ArrayList<ServerInfo> receiveServerInfoArray() throws IOException {
+        ArrayList<ServerInfo> result = new ArrayList<ServerInfo>();
+        int arraySize = receiveInt();
+        for (int i = 0; i < arraySize; i++) {
+            result.add(receiveServerInfo());
+        }
+        return result;
     }
 
 }
