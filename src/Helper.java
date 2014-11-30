@@ -164,7 +164,10 @@ public class Helper {
         _category = register();
 
         // Load the partial II file for _category, if there is
-        _invertedIndex = new InvertedIndex(REDUCER_DIR + _category);
+        String pathToPartialInvertedIndex = REDUCER_DIR + _category;
+        if (TextFile.exists(pathToPartialInvertedIndex)) {
+            _invertedIndex = new InvertedIndex(pathToPartialInvertedIndex);
+        }
 
         try {
             while (true) {
@@ -215,6 +218,14 @@ public class Helper {
         }
 
         public void run() {
+
+            /*try {
+                Console.writeLine("I'm lazy. ");
+                Thread.sleep(100000);
+            }
+            catch (InterruptedException e) { }*/
+
+
             try {
                 Console.write("Start indexing mapping with ");
 
@@ -246,7 +257,7 @@ public class Helper {
                 TextFile.write(pathToPartialCount, outputLines);
 
                 // Inform the master (client) that the work is done
-                messenger.sendTag(Tags.STATUS_INDEXING_MAPPING_SUCCESS);
+                messenger.sendServerInfo(new ServerInfo(_myIpAddress, _myPortNumber));
 
                 Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + ", part ID = " + partId + "\n");
             } catch (IOException e) {

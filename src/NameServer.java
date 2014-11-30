@@ -106,7 +106,7 @@ public class NameServer {
         /**
          * Gets a server that is the least busy.
          */
-        public synchronized ServerInfo  borrowHelper() {
+        public synchronized ServerInfo borrowHelper() {
             int lowestLoad = Integer.MAX_VALUE;
             ServerInfo mostIdle = null;
             for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
@@ -198,13 +198,11 @@ public class NameServer {
                     (new RegistrationWorker(clientSocket)).start();
                 }
                 else if (tag == Tags.REQUEST_CATEGORY_HELPER) {
-                    // Print who wants to do indexing
-                    Console.writeLine("Client " + clientSocket + " requests a helper from any category. ");
+                    Console.writeLine("Client " + clientSocket + " requests a helper from a certain category. ");
                     (new CategoriedHelperLookupWorker(clientSocket)).start();
                 }
                 else if (tag == Tags.REQUEST_CATEGORYLESS_HELPER) {
-                    // Print who wants to do searching
-                    Console.writeLine("Client " + clientSocket + " requests a helper from a certain category. ");
+                    Console.writeLine("Client " + clientSocket + " requests a helper from any category. ");
                     (new CategorylessHelperLookupWorker(clientSocket)).start();
                 }
             }
