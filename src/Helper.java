@@ -5,6 +5,7 @@
 
 import me.yuhuan.collections.Pair;
 import me.yuhuan.io.Directory;
+import me.yuhuan.io.File;
 import me.yuhuan.io.TextFile;
 import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
@@ -236,12 +237,15 @@ public class Helper {
 
                 // Obtain the transaction ID.
                 int transactionId = messenger.receiveInt();
+                Console.writeLine("transaction ID = " + transactionId);
 
-                // Obtain part ID.
-                int partId = messenger.receiveInt();
+                // Obtain the IP and Port# of the master.
+                String masterIpAddress = messenger.receiveString();
+                int masterPortNumber = messenger.receiveInt();
 
-                Console.writeLine("transaction ID = " + transactionId + ", part ID = " + partId);
-
+                // Create a socket and a messenger for this helper to report finishing to.
+                Socket socketToMaster = new Socket(masterIpAddress, masterPortNumber);
+                TcpMessenger messengerToMaster = new TcpMessenger(socketToMaster);
 
                 // TODO: count words
                 HashMap<String, Integer> counts = mapping(TextFile.read(pathToSeg));
@@ -253,13 +257,13 @@ public class Helper {
                 String[] outputLines = linesForOutput.toArray(new String[linesForOutput.size()]);
 
                 // Save to file
-                String pathToPartialCount = MAPPER_OUT_DIR + transactionId + "/" + partId;
+                String pathToPartialCount = MAPPER_OUT_DIR + transactionId + "/" + File.extractFileNameFromPath(pathToSeg, false);
                 TextFile.write(pathToPartialCount, outputLines);
 
                 // Inform the master (client) that the work is done
-                messenger.sendServerInfo(new ServerInfo(_myIpAddress, _myPortNumber));
+                messengerToMaster.sendString(pathToSeg);
 
-                Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + ", part ID = " + partId + "\n");
+                Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + "\n");
             } catch (IOException e) {
                 Console.writeLine("IO error in indexing mapping worker. \n");
             } finally {

@@ -3,9 +3,11 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
+import com.sun.org.apache.bcel.internal.generic.NEW;
 import me.yuhuan.collections.Pair;
 import me.yuhuan.collections.Tuple3;
 import me.yuhuan.io.Directory;
+import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
 import me.yuhuan.net.core.TcpMessenger;
 import me.yuhuan.utilities.Console;
@@ -16,6 +18,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,50 +28,56 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class MiniGoogleServer {
 
-    public static class HelperMonitor implements Iterable<Map.Entry<ServerInfo, Tuple3<Integer, String, Boolean>>> {
+    public static class HelperMonitor implements Iterable<Map.Entry<Pair<ServerInfo, String>, Boolean>> {
         /**
-         * [(Server1, [Executing=False|Done=True]), ...]
+         * [((Server1, pathToSeg), [Executing=False|Done=True]), ...]
          */
-        volatile ConcurrentHashMap<ServerInfo, Tuple3<Integer, String, Boolean>> _table;
+        volatile ConcurrentHashMap<Pair<ServerInfo, String>, Boolean> _table;
 
         public HelperMonitor() {
-            _table = new ConcurrentHashMap<ServerInfo, Tuple3<Integer, String, Boolean>>();
+            _table = new ConcurrentHashMap<Pair<ServerInfo, String>, Boolean>();
         }
 
-        public synchronized void addNewHelper(ServerInfo serverInfo, int partId, String pathToSeg, Boolean status) {
-            if (!_table.containsKey(serverInfo)) _table.put(serverInfo, new Tuple3<Integer, String, Boolean>(partId, pathToSeg, status));
+        public synchronized void addNewHelper(ServerInfo serverInfo, String pathToSeg, Boolean status) {
+            Pair<ServerInfo, String> newHelper = new Pair<ServerInfo, String>(serverInfo, pathToSeg);
+            if (!_table.containsKey(newHelper)) _table.put(newHelper, status);
         }
 
-        public synchronized Tuple3<Integer, String, Boolean> get(ServerInfo helper) {
+        public synchronized void addNewHelper(Pair<ServerInfo, String> newHelper, Boolean status) {
+            if (!_table.containsKey(newHelper)) _table.put(newHelper, status);
+        }
+
+        public synchronized Boolean get(Pair<ServerInfo, String> helper) {
             return _table.get(helper);
         }
 
-        public synchronized void changeStatus(ServerInfo serverInfo, Boolean status) {
-            _table.get(serverInfo).item3 = status;
+        public synchronized void changeStatus(ServerInfo serverInfo, String pathToSeg, Boolean status) {
+            Pair<ServerInfo, String> helper = new Pair<ServerInfo, String>(serverInfo, pathToSeg);
+            _table.put(helper, status);
         }
 
-        public synchronized void removeHelper(ServerInfo serverInfo) {
-            if (!_table.containsKey(serverInfo)) _table.remove(serverInfo);
+        public synchronized void removeHelper(Pair<ServerInfo, String> helper) {
+            if (!_table.containsKey(helper)) _table.remove(helper);
         }
 
         public synchronized Boolean allHelpersDone() {
-            for (Map.Entry<ServerInfo, Tuple3<Integer, String, Boolean>> pair : _table.entrySet()) {
-                if (pair.getValue().item3 == false) return false;
+            for (Map.Entry<Pair<ServerInfo, String>, Boolean> pair : _table.entrySet()) {
+                if (pair.getValue() == false) return false;
             }
             return true;
         }
 
-        public ArrayList<ServerInfo> getUnfinishedHelpers() {
-            ArrayList<ServerInfo> result = new ArrayList<ServerInfo>();
-            for (Map.Entry<ServerInfo, Tuple3<Integer, String, Boolean>> pair : _table.entrySet()) {
-                if (pair.getValue().item3 == false) result.add(pair.getKey());
+        public ArrayList<Pair<ServerInfo, String>> getUnfinishedHelpers() {
+            ArrayList<Pair<ServerInfo, String>> result = new ArrayList<Pair<ServerInfo, String>>();
+            for (Map.Entry<Pair<ServerInfo, String>, Boolean> pair : _table.entrySet()) {
+                if (pair.getValue() == false) result.add(pair.getKey());
             }
             return result;
         }
 
 
         @Override
-        public Iterator<Map.Entry<ServerInfo, Tuple3<Integer, String, Boolean>>> iterator() {
+        public Iterator<Map.Entry<Pair<ServerInfo, String>, Boolean>> iterator() {
             return _table.entrySet().iterator();
         }
     }
@@ -120,14 +129,16 @@ public class MiniGoogleServer {
 
     static class IndexingMaster extends Thread {
         Socket _requesterSocket;
-        HelperMonitor _mapperMonitor;
-        HelperMonitor _reducerMonitor;
+
+        HashSet<String> _unfinishedMappingSegments;
+
+        HelperMonitor _reducerMonitor; //TODO: change this to HashSet
 
         int _transactionId;
 
         public IndexingMaster(Socket clientSocket) {
             _requesterSocket = clientSocket;
-            _mapperMonitor = new HelperMonitor();
+            _unfinishedMappingSegments = new HashSet<String>();
             _reducerMonitor = new HelperMonitor();
         }
 
@@ -143,7 +154,7 @@ public class MiniGoogleServer {
             return helpers;
         }
 
-        public void requestMapping(ServerInfo helper, String pathToWorkOn, int partId) throws IOException {
+        public void requestMapping(ServerInfo helper, String pathToWorkOn, String masterIpAddress, int masterPortNumber) throws IOException {
             Socket socketToCurHelper = new Socket(helper.IPAddressString(), helper.portNumber);
             TcpMessenger messengerToCurHelper = new TcpMessenger(socketToCurHelper);
 
@@ -156,8 +167,9 @@ public class MiniGoogleServer {
             // Send transaction ID to helper.
             messengerToCurHelper.sendInt(_transactionId);
 
-            // Send part ID to helper.
-            messengerToCurHelper.sendInt(partId);
+            // Send the master IP and Port# to helper for it to report to.
+            messengerToCurHelper.sendString(masterIpAddress);
+            messengerToCurHelper.sendInt(masterPortNumber);
         }
 
         public void run() {
@@ -171,6 +183,9 @@ public class MiniGoogleServer {
 
                 // Create a server socket for helpers to reply status.
                 ServerSocket masterServerSocket = new ServerSocket(0);
+                String masterIpAddress = Utilities.getMyIpAddress();
+                int masterPortNumber = Utilities.getMyPortNumber(masterServerSocket);
+
                 masterServerSocket.setSoTimeout(MAX_WAIT_TIME_FOR_HELPER);
 
                 // Create a messenger to the one who sent the indexing request
@@ -198,51 +213,61 @@ public class MiniGoogleServer {
                     ServerInfo curHelper = helpers.get(i);
                     String curPath = pathsToSegments.get(i);
 
-                    requestMapping(curHelper, curPath, i);
+                    requestMapping(curHelper, curPath, masterIpAddress, masterPortNumber);
 
-                    // From this point on, the helper is executing the mapping.
-                    _mapperMonitor.addNewHelper(curHelper, i, curPath, false);
+                    _unfinishedMappingSegments.add(curPath);
 
                     // masterServerSocket should be responsible for receiving the status of helpers.
                 }
 
                 // Start to collect results.
 
-                ArrayList<ServerInfo> unfinished = _mapperMonitor.getUnfinishedHelpers();
-                while (unfinished.size() != 0) {
+                while (_unfinishedMappingSegments.size() != 0) {
                     Console.writeLine("@@@@@@@@@@@@@@@@@@ trying...");
                     try {
-                        while (!_mapperMonitor.allHelpersDone()) {
+                        while (_unfinishedMappingSegments.size() != 0) {
+                            // Wait for helpers to respond.
                             Socket mappingHelperSocket = masterServerSocket.accept();
                             TcpMessenger mappingHelperMessenger = new TcpMessenger(mappingHelperSocket);
-                            ServerInfo mappingHelper = mappingHelperMessenger.receiveServerInfo();
-                            _mapperMonitor.changeStatus(mappingHelper, true);
+
+                            // A helper, when it finishes the mapping job, returns:
+                            //    (1) The ServerInfo it is running on.
+                            //    (2) The path it was working on.
+                            // The helper monitor on the master uses a pair (Serverinfo, Path) to identify helpers.
+                            String finishedPath = mappingHelperMessenger.receiveString();
+                            _unfinishedMappingSegments.remove(finishedPath);
                         }
                     }
                     catch (SocketTimeoutException e) {
-                        ArrayList<ServerInfo> failedHelpers = _mapperMonitor.getUnfinishedHelpers();
+                        // This is the point where the master's server socket does not received enough responses,
+                        // within the time out. This catch branch does the following:
+                        //    (1) Replace each failed helper.
+                        //    (2) Assign the same segment that the failed helper worked on to the new helper.
 
-                        Console.writeLine("\n" + failedHelpers.toString() + "\n");
+                        // Get all failed helpers.
 
-                        int numFailedHelpers = failedHelpers.size();
+                        // TODO: remove this. Debugging purpose only.
+                        Console.writeLine("\n");
+                        for (String job : _unfinishedMappingSegments) {
+                            Console.writeLine(job);
+                        }
+                        Console.writeLine("\n");
+
+                        ArrayList<String> failedJobs = new ArrayList<String>();
+                        for (String job : _unfinishedMappingSegments) failedJobs.add(job);
+
+                        // Borrow new helpers.
+                        int numFailedHelpers = _unfinishedMappingSegments.size();
                         ArrayList<ServerInfo> newHelpers = borrowCategorylessHelpers(numFailedHelpers);
 
+                        // Replace helpers and start jobs on new ones.
                         for (int i = 0; i < numFailedHelpers; i++) {
-                            ServerInfo failedHelper = failedHelpers.get(i);
-
-                            // Get partId and path that the failed helper used to work on
-                            Tuple3<Integer, String, Boolean> helperInformation = _mapperMonitor.get(failedHelper);
-                            int partIdThatTheFailedHelperUsedToWorkOn = helperInformation.item1;
-                            String pathThatTheFailedHelperUsedToWorkOn = helperInformation.item2;
+                            String failedJob = failedJobs.get(i);
 
                             // Redispatch the failed job to the new helper
                             ServerInfo newHelper = newHelpers.get(i);
-                            requestMapping(newHelper, pathThatTheFailedHelperUsedToWorkOn, partIdThatTheFailedHelperUsedToWorkOn);
-
-                            // Remove the failed helper from the monitor
-                            _mapperMonitor.removeHelper(failedHelper);
+                            requestMapping(newHelper, failedJob, masterIpAddress, masterPortNumber);
                         }
-                        unfinished = _mapperMonitor.getUnfinishedHelpers();
                     }
                 }
 

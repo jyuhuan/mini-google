@@ -30,7 +30,7 @@ public class TextFile {
 
     public static String[] read(String path) throws IOException {
         ArrayList<String> lines = new ArrayList<String>();
-        BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(new File(path)), "UTF8"));
+        BufferedReader in = new BufferedReader(new InputStreamReader(new FileInputStream(new java.io.File(path)), "UTF8"));
         String line;
         while ((line = in.readLine()) != null) {
             lines.add(line);
@@ -40,7 +40,7 @@ public class TextFile {
     }
 
     public static boolean exists(String path) throws IOException {
-        File f = new File(path);
+        java.io.File f = new java.io.File(path);
         return (f.exists() && !f.isDirectory());
     }
 
