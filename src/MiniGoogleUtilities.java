@@ -6,7 +6,10 @@
 import me.yuhuan.collections.MultiValueHashTable;
 import me.yuhuan.collections.Pair;
 import me.yuhuan.net.core.ServerInfo;
+import me.yuhuan.net.core.TcpMessenger;
 
+import java.io.IOException;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -92,4 +95,34 @@ public class MiniGoogleUtilities {
         else if ("0123456789".indexOf(firstLetter) >= 0) return "#";
         else return "UNK";
     }
+
+    public static ArrayList<ServerInfo> borrowCategorylessHelpers(int numHelpersNeeded) throws IOException {
+        if (numHelpersNeeded == 0) return new ArrayList<ServerInfo>();
+
+        // Contact name server, and borrow that many helpers.
+        Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
+        TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
+        messengerToNameServer.sendTag(Tags.REQUEST_CATEGORYLESS_HELPER);
+        messengerToNameServer.sendInt(numHelpersNeeded);
+        return messengerToNameServer.receiveServerInfoArray();
+    }
+
+    public static ServerInfo borrowOneCategoriedHelper(String category) throws IOException {
+        // Contact name server, and borrow that many helpers.
+        Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
+        TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
+        messengerToNameServer.sendTag(Tags.REQUEST_CATEGORY_HELPER);
+        messengerToNameServer.sendString(category);
+        return messengerToNameServer.receiveServerInfo();
+    }
+
+    public static ArrayList<ServerInfo> borrowASetOfReducingHelpers() throws IOException {
+        // Contact name server, and borrow that many helpers.
+        Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
+        TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
+        messengerToNameServer.sendTag(Tags.REQUEST_A_SET_OF_CATEGORY_HELPER);
+        return messengerToNameServer.receiveServerInfoArray();
+    }
+
+
 }

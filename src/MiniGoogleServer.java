@@ -15,10 +15,7 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -117,6 +114,7 @@ public class MiniGoogleServer {
                     (new IndexingMaster(clientSocket)).start();
                 }
                 else if (tag == Tags.REQUEST_SEARCHING) {
+                    (new SearchingMaster(clientSocket)).start();
                 }
             }
         }
@@ -144,34 +142,6 @@ public class MiniGoogleServer {
             _requesterSocket = clientSocket;
             _unfinishedMappingJobs = new HashSet<String>();
             _unfinishedReducingJobs = new HashSet<String>();
-        }
-
-        public ArrayList<ServerInfo> borrowCategorylessHelpers(int numHelpersNeeded) throws IOException {
-            if (numHelpersNeeded == 0) return new ArrayList<ServerInfo>();
-
-            // Contact name server, and borrow that many helpers.
-            Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
-            TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
-            messengerToNameServer.sendTag(Tags.REQUEST_CATEGORYLESS_HELPER);
-            messengerToNameServer.sendInt(numHelpersNeeded);
-            return messengerToNameServer.receiveServerInfoArray();
-        }
-
-        public ServerInfo borrowOneCategoriedHelper(String category) throws IOException {
-            // Contact name server, and borrow that many helpers.
-            Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
-            TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
-            messengerToNameServer.sendTag(Tags.REQUEST_CATEGORY_HELPER);
-            messengerToNameServer.sendString(category);
-            return messengerToNameServer.receiveServerInfo();
-        }
-
-        public ArrayList<ServerInfo> borrowASetOfReducingHelpers() throws IOException {
-            // Contact name server, and borrow that many helpers.
-            Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
-            TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
-            messengerToNameServer.sendTag(Tags.REQUEST_A_SET_OF_CATEGORY_HELPER);
-            return messengerToNameServer.receiveServerInfoArray();
         }
 
         public void requestMapping(ServerInfo helper, String pathToWorkOn, String masterIpAddress, int masterPortNumber) throws IOException {
@@ -246,7 +216,7 @@ public class MiniGoogleServer {
                 int numHelpersNeeded = pathsToSegments.size();
 
                 // Contact name server, and borrow that many helpers.
-                ArrayList<ServerInfo> helpers = borrowCategorylessHelpers(numHelpersNeeded);
+                ArrayList<ServerInfo> helpers = MiniGoogleUtilities.borrowCategorylessHelpers(numHelpersNeeded);
 
                 // Send each segment to one helper, and request mapping.
                 for (int i = 0; i < numHelpersNeeded; i++) {
@@ -297,7 +267,7 @@ public class MiniGoogleServer {
 
                         // Borrow new helpers.
                         int numFailedHelpers = _unfinishedMappingJobs.size();
-                        ArrayList<ServerInfo> newHelpers = borrowCategorylessHelpers(numFailedHelpers);
+                        ArrayList<ServerInfo> newHelpers = MiniGoogleUtilities.borrowCategorylessHelpers(numFailedHelpers);
 
                         // Replace helpers and start jobs on new ones.
                         for (int i = 0; i < numFailedHelpers; i++) {
@@ -323,7 +293,7 @@ public class MiniGoogleServer {
                 int masterPortNumberForReducing = Utilities.getMyPortNumber(masterServerSocketForReducing);
                 masterServerSocketForReducing.setSoTimeout(MAX_WAIT_TIME_FOR_HELPER);
 
-                ArrayList<ServerInfo> reducingHelpers = borrowASetOfReducingHelpers();
+                ArrayList<ServerInfo> reducingHelpers = MiniGoogleUtilities.borrowASetOfReducingHelpers();
 
                 for (ServerInfo serverInfo : reducingHelpers) {
                     requestReducing(serverInfo, masterIpAddress, masterPortNumberForReducing);
@@ -360,7 +330,7 @@ public class MiniGoogleServer {
                         Console.writeLine("\n");
 
                         for (String failedReducingJob : _unfinishedReducingJobs) {
-                            ServerInfo newReducingHelper = borrowOneCategoriedHelper(failedReducingJob);
+                            ServerInfo newReducingHelper = MiniGoogleUtilities.borrowOneCategoriedHelper(failedReducingJob);
                             requestReducing(newReducingHelper, masterIpAddress, masterPortNumberForReducing);
                         }
                     }
@@ -383,7 +353,129 @@ public class MiniGoogleServer {
                 }
             }
         }
-
-
     }
+
+    static class SearchingMaster extends Thread {
+        Socket _requesterSocket;
+
+        HashSet<String> _unfinishedJobs;
+
+        public SearchingMaster(Socket requesterSocket) {
+            _requesterSocket = requesterSocket;
+            _unfinishedJobs = new HashSet<String>();
+        }
+
+        void requestSearching(ServerInfo helper, ArrayList<String> keywords, String masterIpAddress, int masterPortNumber) throws IOException {
+            Socket socket = new Socket(helper.IPAddressString(), helper.portNumber);
+            TcpMessenger messenger = new TcpMessenger(socket);
+
+            messenger.sendTag(Tags.REQUEST_SEARCHING);
+
+            messenger.sendInt(keywords.size());
+            for (String keyword : keywords) {
+                messenger.sendString(keyword);
+            }
+
+            // Send the master IP and Port# to helper for it to report to.
+            messenger.sendString(masterIpAddress);
+            messenger.sendInt(masterPortNumber);
+        }
+
+        public void run() {
+            try {
+
+
+                // A messenger to talk to the one who requested this searching job.
+                TcpMessenger messengerToRequester = new TcpMessenger(_requesterSocket);
+
+                // Obtain the number of keywords to come.
+                int numKeywords = messengerToRequester.receiveInt();
+
+                // Obtain all the keywords.
+                ArrayList<String> keywords = new ArrayList<String>();
+                for (int i = 0; i < numKeywords; i++) {
+                    keywords.add(messengerToRequester.receiveString());
+                }
+
+                // Group keywords by categories.
+                HashMap<String, ArrayList<String>> groups = new HashMap<String, ArrayList<String>>();
+
+                for (String keyword : keywords) {
+                    String category = MiniGoogleUtilities.getCategoryOf(keyword);
+                    if (groups.containsKey(category)) {
+                        groups.get(category).add(keyword);
+                    }
+                    else {
+                        ArrayList<String> keywordsUnderTheCategory = new ArrayList<String>();
+                        keywordsUnderTheCategory.add(keyword);
+                        groups.put(category, keywordsUnderTheCategory);
+                    }
+                }
+
+                // Create a server socket for searching helpers to reply status.
+                ServerSocket masterServerSocket = new ServerSocket(0);
+                String masterIpAddress = Utilities.getMyIpAddress();
+                int masterPortNumber = Utilities.getMyPortNumber(masterServerSocket);
+
+                masterServerSocket.setSoTimeout(MAX_WAIT_TIME_FOR_HELPER);
+
+
+                // For each category, borrow one searching helper from name server.
+                for (HashMap.Entry<String, ArrayList<String>> pair : groups.entrySet()) {
+                    String category = pair.getKey();
+                    ServerInfo helper = MiniGoogleUtilities.borrowOneCategoriedHelper(category);
+                    requestSearching(helper, pair.getValue(), masterIpAddress, masterPortNumber);
+                    _unfinishedJobs.add(category);
+                }
+
+
+                // Start to collect results.
+                while (_unfinishedJobs.size() != 0) {
+                    Console.writeLine("@@@@@@@@@@@@@@@@@@ trying...");
+                    try {
+                        while (_unfinishedJobs.size() != 0) {
+                            // Wait for helpers to respond.
+                            Socket reducingHelperSocket = masterServerSocket.accept();
+                            TcpMessenger reducingHelperMessenger = new TcpMessenger(reducingHelperSocket);
+
+                            // A helper, when it finishes the reducing job, returns:
+                            //    (1) The ServerInfo it is running on.
+                            //    (2) The category it was working on.
+                            // The helper monitor on the master uses a pair (Serverinfo, Path) to identify helpers.
+                            String finishedCategory = reducingHelperMessenger.receiveString();
+                            _unfinishedJobs.remove(finishedCategory);
+                        }
+                    }
+                    catch (SocketTimeoutException e) {
+                        // TODO: remove this. Debugging purpose only.
+                        Console.writeLine("\n");
+                        for (String job : _unfinishedJobs) {
+                            Console.writeLine(job);
+                        }
+                        Console.writeLine("\n");
+
+                        for (String failedReducingJob : _unfinishedJobs) {
+                            ServerInfo newReducingHelper = MiniGoogleUtilities.borrowOneCategoriedHelper(failedReducingJob);
+                            requestSearching(newReducingHelper, groups.get(failedReducingJob), masterIpAddress, masterPortNumber);
+                        }
+                    }
+                }
+
+
+            }
+            catch (IOException e) {
+                Console.writeLine("IO error in searching master. ");
+            }
+            finally {
+                try {
+                    _requesterSocket.close();
+                    Console.writeLine("Socket to client " + _requesterSocket.getInetAddress().getHostAddress() + ":" + _requesterSocket.getPort() + " is closed. ");
+                }
+                catch (IOException e) {
+                    Console.writeLine("Socket to client " + _requesterSocket.getInetAddress().getHostAddress() + ":" + _requesterSocket.getPort() + " failed to close. ");
+                }
+            }
+        }
+    }
+
 }

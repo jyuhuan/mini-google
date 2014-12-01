@@ -72,6 +72,10 @@ public class Helper {
             }
         }
 
+        public ArrayList<Pair<String, Integer>> get(String word) {
+            return _table.get(word);
+        }
+
         /**
          * Merge with the counts for a new document.
          * @param more Counts for the new document.
@@ -195,6 +199,7 @@ public class Helper {
                 } else if (tag == Tags.REQUEST_INDEXING_REDUCING) {
                     (new IndexingReducingWorker(clientSocket)).start();
                 } else if (tag == Tags.REQUEST_SEARCHING) {
+                    (new SearchingWorker(clientSocket)).start();
                 }
 
             }
@@ -276,7 +281,7 @@ public class Helper {
         }
     }
 
-    private static class IndexingReducingWorker extends Thread {
+    static class IndexingReducingWorker extends Thread {
         /**
          * The TPC socket of the client. Used to talk back to the client.
          */
@@ -360,4 +365,60 @@ public class Helper {
         }
 
     }
+
+    static class SearchingWorker extends Thread {
+        Socket _clientSocket;
+
+        public SearchingWorker(Socket clientSocket) {
+            _clientSocket = clientSocket;
+        }
+
+        public void run() {
+            try {
+
+                Console.writeLine("Searching starts. ");
+
+                TcpMessenger messenger = new TcpMessenger(_clientSocket);
+
+                // Obtain the number of keywords to come.
+                int numKeywords = messenger.receiveInt();
+
+                // Obtain all the keywords.
+                ArrayList<String> keywords = new ArrayList<String>();
+                for (int i = 0; i < numKeywords; i++) {
+                    keywords.add(messenger.receiveString());
+                }
+
+                // Obtain the IP and Port# of the master.
+                String masterIpAddress = messenger.receiveString();
+                int masterPortNumber = messenger.receiveInt();
+
+                // Create a socket and a messenger for this helper to report finishing to.
+                Socket socketToMaster = new Socket(masterIpAddress, masterPortNumber);
+                TcpMessenger messengerToMaster = new TcpMessenger(socketToMaster);
+
+
+                // Look up table, and output result.
+                for (String keyword : keywords) {
+                    Console.write("Results for keyword " + keyword + " are: ");
+                    Console.writeLine("\t" + _invertedIndex.get(keyword));
+                }
+
+                messengerToMaster.sendString(_category);
+
+                Console.writeLine("Searching done. ");
+
+            } catch (IOException e) {
+                Console.writeLine("IO error in indexing reducing worker. \n");
+            } finally {
+                try {
+                    _clientSocket.close();
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
+                } catch (IOException e) {
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
+                }
+            }
+        }
+    }
+
 }
