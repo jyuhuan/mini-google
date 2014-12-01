@@ -31,11 +31,10 @@ public class MiniGoogleUtilities {
         if (categories != null) return categories;
 
         categories = new ArrayList<String>();
-        categories.add("letter1part1");
-        categories.add("letter1part2");
-        categories.add("letter2part1");
-        categories.add("letter2part2");
-        categories.add("letter2part3");
+        categories.add("a");
+        categories.add("b");
+        categories.add("c");
+        categories.add("d");
         categories.add("#");
         return categories;
     }
@@ -86,33 +85,11 @@ public class MiniGoogleUtilities {
 
     public static String getCategoryOf(String word) {
         char firstLetter = word.charAt(0);
-        if ("abcdefghijklm".indexOf(firstLetter) >= 0) {
-            // falls into letter 1
-            if (word.length() > 1) {
-                if ("abcdef".indexOf(word.charAt(1)) >= 0) {
-                    return "letter1part1";
-                } else {
-                    return "letter1part2";
-                }
-            }
-            else return "letter1part1";
-        }
-        else if ("nopqrstuvwxyz".indexOf(firstLetter) >= 0) {
-            // falls into letter 2
-            if (word.length() > 1) {
-                if ("nopqrst".indexOf(word.charAt(1)) >= 0) {
-                    return "letter2part1";
-                }
-                if ("uvwxyz".indexOf(word.charAt(1)) >= 0) {
-                    return "letter2part2";
-                } else {
-                    return "letter2part3";
-                }
-            }
-            else return "letter2part1";
-
-        }
+        if (firstLetter == 'a') return "a";
+        else if (firstLetter == 'b') return "b";
+        else if (firstLetter == 'c') return "c";
+        else if (firstLetter == 'd') return "d";
         else if ("0123456789".indexOf(firstLetter) >= 0) return "#";
-        else return "UNKNOWN";
+        else return "UNK";
     }
 }

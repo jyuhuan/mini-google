@@ -201,6 +201,10 @@ public class NameServer {
                     Console.writeLine("Client " + clientSocket + " requests a helper from a certain category. ");
                     (new CategoriedHelperLookupWorker(clientSocket)).start();
                 }
+                else if (tag == Tags.REQUEST_A_SET_OF_CATEGORY_HELPER) {
+                    Console.writeLine("Client " + clientSocket + " requests a set of categoried helpers. ");
+                    (new CategoriedHelperSetLookupWorker(clientSocket)).start();
+                }
                 else if (tag == Tags.REQUEST_CATEGORYLESS_HELPER) {
                     Console.writeLine("Client " + clientSocket + " requests a helper from any category. ");
                     (new CategorylessHelperLookupWorker(clientSocket)).start();
@@ -300,13 +304,45 @@ public class NameServer {
             try {
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
 
-                // Obtain how many mapping helpers the requester wants.
-                int numHelpersReqested = messenger.receiveInt();
+                // Obtain what category the requester wants.
                 String category = messenger.receiveString();
 
                 // Borrow that many helpers from the table.
+                ServerInfo helper =_table.borrowHelper(category);
+
+                // Send these helpers to the requester.
+                messenger.sendServerInfo(helper);
+            }
+            catch (IOException e) {
+                Console.writeLine("IO error in one categoried helper lookup worker. ");
+            }
+            finally {
+                try {
+                    _clientSocket.close();
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
+                }
+                catch (IOException e) {
+                    Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
+                }
+            }
+        }
+    }
+
+
+    private static class CategoriedHelperSetLookupWorker extends Thread {
+        Socket _clientSocket;
+
+        public CategoriedHelperSetLookupWorker(Socket clientSocket) {
+            _clientSocket = clientSocket;
+        }
+
+        public void run() {
+            try {
+                TcpMessenger messenger = new TcpMessenger(_clientSocket);
+
+                // Borrow that many helpers from the table.
                 ArrayList<ServerInfo> helpers = new ArrayList<ServerInfo>();
-                for (int i = 0; i < numHelpersReqested; i++) {
+                for (String category : MiniGoogleUtilities.generateSimpleCategories()) {
                     helpers.add(_table.borrowHelper(category));
                 }
 
@@ -314,7 +350,7 @@ public class NameServer {
                 messenger.sendServerInfoArray(helpers);
             }
             catch (IOException e) {
-                Console.writeLine("IO error in categoried helper lookup worker. ");
+                Console.writeLine("IO error in categoried helper set lookup worker. ");
             }
             finally {
                 try {

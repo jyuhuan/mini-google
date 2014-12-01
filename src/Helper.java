@@ -78,18 +78,22 @@ public class Helper {
          * @param documentName Name of the new document.
          */
         public void mergeWith(HashMap<String, Integer> more, String documentName) {
-            for (HashMap.Entry<String, Integer> pair : more.entrySet()) {
-                String word = pair.getKey();
-                int count = pair.getValue();
+            try {
+                for (HashMap.Entry<String, Integer> pair : more.entrySet()) {
+                    String word = pair.getKey();
+                    int count = pair.getValue();
 
-                if (_table.containsKey(word)) {
-                    _table.get(word).add(new Pair<String, Integer>(documentName, count));
+                    if (_table.containsKey(word)) {
+                        _table.get(word).add(new Pair<String, Integer>(documentName, count));
+                    } else {
+                        ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
+                        postings.add(new Pair<String, Integer>(documentName, count));
+                        _table.put(word, postings);
+                    }
                 }
-                else {
-                    ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
-                    postings.add(new Pair<String, Integer>(documentName, count));
-                    _table.put(word, postings);
-                }
+            }
+            catch (NullPointerException e) {
+                int aaa = 0;
             }
         }
 
@@ -169,6 +173,9 @@ public class Helper {
         if (TextFile.exists(pathToPartialInvertedIndex)) {
             _invertedIndex = new InvertedIndex(pathToPartialInvertedIndex);
         }
+        else {
+            _invertedIndex = new InvertedIndex();
+        }
 
         try {
             while (true) {
@@ -220,13 +227,6 @@ public class Helper {
 
         public void run() {
 
-            /*try {
-                Console.writeLine("I'm lazy. ");
-                Thread.sleep(100000);
-            }
-            catch (InterruptedException e) { }*/
-
-
             try {
                 Console.write("Start indexing mapping with ");
 
@@ -247,7 +247,6 @@ public class Helper {
                 Socket socketToMaster = new Socket(masterIpAddress, masterPortNumber);
                 TcpMessenger messengerToMaster = new TcpMessenger(socketToMaster);
 
-                // TODO: count words
                 HashMap<String, Integer> counts = mapping(TextFile.read(pathToSeg));
                 ArrayList<String> linesForOutput = new ArrayList<String>();
                 for (HashMap.Entry<String, Integer> pair : counts.entrySet()) {
@@ -293,14 +292,22 @@ public class Helper {
 
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
 
-                // Obtain the directory that mappers output the partial counts.
-                String mapperOutputDir = messenger.receiveString();
+                // Obtain the transactionId that points to the directory where mappers have output the partial counts.
+                int transactionId = messenger.receiveInt();
 
                 // Obtain the document name.
                 String documentName = messenger.receiveString();
 
+                // Obtain the IP and Port# of the master.
+                String masterIpAddress = messenger.receiveString();
+                int masterPortNumber = messenger.receiveInt();
+
+                // Create a socket and a messenger for this helper to report finishing to.
+                Socket socketToMaster = new Socket(masterIpAddress, masterPortNumber);
+                TcpMessenger messengerToMaster = new TcpMessenger(socketToMaster);
+
                 // Open all partial count files in the directory.
-                ArrayList<String> pathsToPartialCounts = Directory.getFiles(mapperOutputDir);
+                ArrayList<String> pathsToPartialCounts = Directory.getFiles(MAPPER_OUT_DIR + transactionId + "/");
                 ArrayList<String[]> partialCounts = new ArrayList<String[]>();
                 for (String path : pathsToPartialCounts) {
                     partialCounts.add(TextFile.read(path));
@@ -311,8 +318,12 @@ public class Helper {
                 for (String[] counts : partialCounts) {
                     for (String line : counts) {
                         String[] parts = line.split(",");
-                        Pair<String, Integer> pair = new Pair<String, Integer>(parts[0], Integer.parseInt(parts[1]));
-                        unmergedCounts.add(pair);
+                        String word = parts[0];
+
+                        if (MiniGoogleUtilities.getCategoryOf(word).equals(_category)) {
+                            Pair<String, Integer> pair = new Pair<String, Integer>(word, Integer.parseInt(parts[1]));
+                            unmergedCounts.add(pair);
+                        }
                     }
                 }
 
@@ -332,9 +343,9 @@ public class Helper {
                 _invertedIndex.saveToFile(REDUCER_DIR + _category);
 
                 // Inform the master
-                messenger.sendTag(Tags.STATUS_INDEXING_REDUCING_SUCCESS);
+                messengerToMaster.sendString(_category);
 
-                Console.writeLine("Finished indexing mapping. \n");
+                Console.writeLine("Finished indexing reducing. \n");
 
             } catch (IOException e) {
                 Console.writeLine("IO error in indexing reducing worker. \n");

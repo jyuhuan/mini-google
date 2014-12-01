@@ -9,6 +9,7 @@
 public class Tags {
     public static final int REQUEST_HELPER_REGISTERING = 1;
     public static final int REQUEST_CATEGORYLESS_HELPER = 2;
+    public static final int REQUEST_A_SET_OF_CATEGORY_HELPER = 10;
     public static final int REQUEST_CATEGORY_HELPER = 3;
     public static final int REQUEST_INDEXING = 4;
     public static final int REQUEST_INDEXING_MAPPING = 5;
