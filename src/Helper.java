@@ -130,6 +130,7 @@ public class Helper {
     //region HELPER CONFIGURATIONS
     static final String MAPPER_OUT_DIR = "working/mappers/";
     static final String REDUCER_DIR = "working/reducers/";
+    static final int IM_ALIVE_INTERVAL = 5000;
     //endregion
 
     static String _nameServerIpAddress;
@@ -158,6 +159,14 @@ public class Helper {
         return categoryAssigned;
     }
 
+    static void returnToNameServer() throws IOException {
+        Socket socketToNameServer = new Socket(_nameServerIpAddress, _nameServerPortNumber);
+        TcpMessenger messenger = new TcpMessenger(socketToNameServer);
+        messenger.sendTag(Tags.REQUEST_HELPER_RETURN);
+        messenger.sendServerInfo(new ServerInfo(_myIpAddress, _myPortNumber));
+        messenger.sendString(_category);
+    }
+
     public static void main(String[] args) throws IOException {
 
         // Set up the listener on this helper.
@@ -180,6 +189,9 @@ public class Helper {
         else {
             _invertedIndex = new InvertedIndex();
         }
+
+        // Start the reporter thread that tells the name server I'm alive.
+        (new ImAliveWorker()).start();
 
         try {
             while (true) {
@@ -218,6 +230,31 @@ public class Helper {
             }
         }
         return counts;
+    }
+
+    static class ImAliveWorker extends Thread {
+        public void run() {
+
+            try {
+                while (true) {
+
+                    // TODO: talk to name server
+                    Socket socketToNameServer = new Socket(_nameServerIpAddress, _nameServerPortNumber);
+                    TcpMessenger messenger = new TcpMessenger(socketToNameServer);
+
+                    messenger.sendTag(Tags.MESSAGE_HELPER_ALIVE);
+                    messenger.sendServerInfo(new ServerInfo(_myIpAddress, _myPortNumber));
+
+                    try {
+                        Thread.sleep(IM_ALIVE_INTERVAL);
+                    }
+                    catch (InterruptedException e) { }
+                }
+
+            } catch (IOException e) {
+                Console.writeLine("IO error in indexing mapping worker. \n");
+            }
+        }
     }
 
     static class IndexingMappingWorker extends Thread {
@@ -266,6 +303,9 @@ public class Helper {
 
                 // Inform the master (client) that the work is done
                 messengerToMaster.sendString(pathToSeg);
+
+                // Return myself to name server
+                returnToNameServer();
 
                 Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + "\n");
             } catch (IOException e) {
@@ -350,6 +390,9 @@ public class Helper {
                 // Inform the master
                 messengerToMaster.sendString(_category);
 
+                // Return myself to name server
+                returnToNameServer();
+
                 Console.writeLine("Finished indexing reducing. \n");
 
             } catch (IOException e) {
@@ -405,6 +448,10 @@ public class Helper {
                 }
 
                 messengerToMaster.sendString(_category);
+
+                // Return myself to name server
+                returnToNameServer();
+
 
                 Console.writeLine("Searching done. ");
 

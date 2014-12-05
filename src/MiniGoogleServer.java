@@ -3,7 +3,6 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
-import me.yuhuan.collections.Pair;
 import me.yuhuan.io.Directory;
 import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
@@ -16,75 +15,29 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by Yuhuan Jiang on 11/24/14.
  */
+
+/**
+ * Represents a MiniGoogle server that takes in either
+ */
 public class MiniGoogleServer {
 
-    public static class HelperMonitor implements Iterable<Map.Entry<Pair<ServerInfo, String>, Boolean>> {
-        /**
-         * [((Server1, pathToSeg), [Executing=False|Done=True]), ...]
-         */
-        volatile ConcurrentHashMap<Pair<ServerInfo, String>, Boolean> _table;
-
-        public HelperMonitor() {
-            _table = new ConcurrentHashMap<Pair<ServerInfo, String>, Boolean>();
-        }
-
-        public synchronized void addNewHelper(ServerInfo serverInfo, String pathToSeg, Boolean status) {
-            Pair<ServerInfo, String> newHelper = new Pair<ServerInfo, String>(serverInfo, pathToSeg);
-            if (!_table.containsKey(newHelper)) _table.put(newHelper, status);
-        }
-
-        public synchronized void addNewHelper(Pair<ServerInfo, String> newHelper, Boolean status) {
-            if (!_table.containsKey(newHelper)) _table.put(newHelper, status);
-        }
-
-        public synchronized Boolean get(Pair<ServerInfo, String> helper) {
-            return _table.get(helper);
-        }
-
-        public synchronized void changeStatus(ServerInfo serverInfo, String pathToSeg, Boolean status) {
-            Pair<ServerInfo, String> helper = new Pair<ServerInfo, String>(serverInfo, pathToSeg);
-            _table.put(helper, status);
-        }
-
-        public synchronized void removeHelper(Pair<ServerInfo, String> helper) {
-            if (!_table.containsKey(helper)) _table.remove(helper);
-        }
-
-        public synchronized Boolean allHelpersDone() {
-            for (Map.Entry<Pair<ServerInfo, String>, Boolean> pair : _table.entrySet()) {
-                if (pair.getValue() == false) return false;
-            }
-            return true;
-        }
-
-        public ArrayList<Pair<ServerInfo, String>> getUnfinishedHelpers() {
-            ArrayList<Pair<ServerInfo, String>> result = new ArrayList<Pair<ServerInfo, String>>();
-            for (Map.Entry<Pair<ServerInfo, String>, Boolean> pair : _table.entrySet()) {
-                if (pair.getValue() == false) result.add(pair.getKey());
-            }
-            return result;
-        }
-
-
-        @Override
-        public Iterator<Map.Entry<Pair<ServerInfo, String>, Boolean>> iterator() {
-            return _table.entrySet().iterator();
-        }
-    }
-
     // Configuration of the server
-    static final int PORT = 5555;
 
+    /**
+     * The port number that the server socket listens to.
+     */
+    static final int PORT = 5555; // TODO: change this to 0.
+
+    /**
+     * The directory that all mappers should output to. Structure of this directory:
+     * ./working/mappers/transactionId1/
+     */
     static final String MAPPER_OUT_DIR = "working/mappers/";
-    static final String REDUCER_DIR = "working/reducers/";
-
     static final int MAX_WAIT_TIME_FOR_HELPER = 10000;
-
 
     public static void main(String[] args) throws IOException {
 
@@ -123,7 +76,14 @@ public class MiniGoogleServer {
         }
     }
 
+    /**
+     * A thread that coordinates an indexing request.
+     * Note: use a new instance of this thread for each transaction.
+     */
     static class IndexingMaster extends Thread {
+        /**
+         * A socket to the requester, usually the client that requested the indexing transaction.
+         */
         Socket _requesterSocket;
 
         /**

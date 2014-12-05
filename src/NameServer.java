@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,6 +27,8 @@ public class NameServer {
 
     // Configurations
     private static final int PORT_NUMBER = 12345; // TODO: change to 0
+    private static final int CHECK_INTERVAL = 3000;
+    private static final long HELPER_ALIVE_THREASHOLD = 8000;
 
     public static class MiniGoogleNameServerTable {
         volatile ConcurrentHashMap<String, ArrayList<Pair<ServerInfo, Integer>>> _table;
@@ -40,6 +43,7 @@ public class NameServer {
         /**
          * Gets the next category according to some standard. Currently, it returns the category
          * that has the least number of helpers.
+         *
          * @return The category that has the least number of helpers.
          */
         private String getNextCategory() {
@@ -129,6 +133,7 @@ public class NameServer {
 
         /**
          * Gets a server in a category that is the least busy.
+         *
          * @param category A category to search a server for.
          * @return A server in the specified category that is the least busy.
          */
@@ -150,10 +155,89 @@ public class NameServer {
         public synchronized void returnHelper(ServerInfo serverInfo, String category) {
             decreaseLoadOn(serverInfo, category);
         }
+
+        public synchronized void removeHelper(ServerInfo serverInfo) {
+            for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
+                ArrayList<Pair<ServerInfo, Integer>> list = entry.getValue();
+                Pair<ServerInfo, Integer> toRemove = null;
+                for (Pair<ServerInfo, Integer> pair : list) {
+                    if (pair.item1.equals(serverInfo)) toRemove = pair;
+                }
+                if (toRemove != null) list.remove(toRemove);
+            }
+        }
+
+        @Override
+        public synchronized String toString() {
+            StringBuilder builder = new StringBuilder();
+            for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
+                builder.append(entry.getKey() + ": ");
+                for (Pair<ServerInfo, Integer> pair : entry.getValue()) {
+                    builder.append(pair.toString() + " || ");
+                }
+                builder.append("\n");
+            }
+            return builder.toString();
+        }
     }
 
+    public static class MiniGoogleServerTracker {
+        volatile ConcurrentHashMap<ServerInfo, Long> _table;
+
+        public MiniGoogleServerTracker() {
+            _table = new ConcurrentHashMap<ServerInfo, Long>();
+        }
+
+        private long getCurrentTime() {
+            Date date = new Date();
+            return date.getTime();
+        }
+
+        public synchronized void add(ServerInfo serverInfo) {
+            if (!_table.containsKey(serverInfo)) _table.put(serverInfo, getCurrentTime());
+        }
+
+        public synchronized void remove(ServerInfo serverInfo) {
+            if (_table.containsKey(serverInfo)) _table.remove(serverInfo);
+        }
+
+        public synchronized void retain(ServerInfo serverInfo) {
+            if (_table.containsKey(serverInfo)) _table.put(serverInfo, getCurrentTime());
+        }
+
+        public synchronized boolean isDead(ServerInfo serverInfo) {
+            if (_table.containsKey(serverInfo)) {
+                long lastTimestamp = _table.get(serverInfo);
+                long currentTimestamp = getCurrentTime();
+                return (currentTimestamp - lastTimestamp > HELPER_ALIVE_THREASHOLD);
+            }
+            else return false;
+        }
+
+        public synchronized ArrayList<ServerInfo> getDeadServers() {
+            ArrayList<ServerInfo> result = new ArrayList<ServerInfo>();
+            for (Map.Entry<ServerInfo, Long> pair : _table.entrySet()) {
+                ServerInfo curServer = pair.getKey();
+                if (isDead(curServer)) result.add(curServer);
+            }
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder builder = new StringBuilder();
+            for (Map.Entry<ServerInfo, Long> pair : _table.entrySet()) {
+                builder.append(pair.getKey());
+                builder.append(" : ");
+                builder.append(pair.getValue());
+                builder.append("\n");
+            }
+            return builder.toString();
+        }
+    }
 
     static MiniGoogleNameServerTable _table;
+    static MiniGoogleServerTracker _serverTracker;
 
     public static void main(String[] args) throws IOException {
 
@@ -162,6 +246,9 @@ public class NameServer {
 
         // Create the table with the categories as keys, and value being empty.
         _table = new MiniGoogleNameServerTable(categories);
+
+        // Create a server tracker that tracks the liveliness of each helper.
+        _serverTracker = new MiniGoogleServerTracker();
 
         // A socket that listens to incoming requests on a system-allocated port number.
         ServerSocket serverSocket = new ServerSocket(PORT_NUMBER);
@@ -175,7 +262,7 @@ public class NameServer {
         // Write the IP and port number of this port mapper to a publicly known file location.
         TextFile.write("name_server_info", new String[]{myIpAddress, String.valueOf(myPortNumber)});
 
-        // TODO: start the "I'm Alive" worker here.
+        (new HelperAvailabilityCheckingWorker()).start();
 
         try {
             while (true) {
@@ -196,23 +283,81 @@ public class NameServer {
 
                     // Start registration worker
                     (new RegistrationWorker(clientSocket)).start();
-                }
-                else if (tag == Tags.REQUEST_CATEGORY_HELPER) {
+                } else if (tag == Tags.REQUEST_CATEGORY_HELPER) {
                     Console.writeLine("Client " + clientSocket + " requests a helper from a certain category. ");
                     (new CategoriedHelperLookupWorker(clientSocket)).start();
-                }
-                else if (tag == Tags.REQUEST_A_SET_OF_CATEGORY_HELPER) {
+                } else if (tag == Tags.REQUEST_A_SET_OF_CATEGORY_HELPER) {
                     Console.writeLine("Client " + clientSocket + " requests a set of categoried helpers. ");
                     (new CategoriedHelperSetLookupWorker(clientSocket)).start();
-                }
-                else if (tag == Tags.REQUEST_CATEGORYLESS_HELPER) {
+                } else if (tag == Tags.REQUEST_CATEGORYLESS_HELPER) {
                     Console.writeLine("Client " + clientSocket + " requests a helper from any category. ");
                     (new CategorylessHelperLookupWorker(clientSocket)).start();
+                } else if (tag == Tags.REQUEST_HELPER_RETURN) {
+                    Console.writeLine("Client " + clientSocket + " wants to return a helper. ");
+                    (new HelperReturnWorker(clientSocket)).start();
+                }
+                else if (tag == Tags.MESSAGE_HELPER_ALIVE) {
+                    (new HelperAvailabilityUpdatingWorker(clientSocket)).start();
+                }
+            }
+        } finally {
+            serverSocket.close();
+        }
+    }
+
+    static class HelperAvailabilityUpdatingWorker extends Thread {
+        Socket _helperSocket;
+
+        public HelperAvailabilityUpdatingWorker(Socket helperSocket) {
+            _helperSocket = helperSocket;
+        }
+
+        public void run() {
+            try {
+                TcpMessenger messenger = new TcpMessenger(_helperSocket);
+                ServerInfo serverInfoToUpdate = messenger.receiveServerInfo();
+
+                _serverTracker.retain(serverInfoToUpdate);
+
+            } catch (IOException e) {
+                Console.writeLine("IO error in helper updating worker. ");
+            } finally {
+                try {
+                    _helperSocket.close();
+                    Console.writeLine("Socket to client " + _helperSocket.getInetAddress().getHostAddress() + ":" + _helperSocket.getPort() + " is closed. ");
+                } catch (IOException e) {
+                    Console.writeLine("Socket to client " + _helperSocket.getInetAddress().getHostAddress() + ":" + _helperSocket.getPort() + " failed to close. ");
                 }
             }
         }
-        finally {
-            serverSocket.close();
+    }
+
+    static class HelperAvailabilityCheckingWorker extends Thread {
+
+        public void run() {
+
+            while (true) {
+
+                ArrayList<ServerInfo> deadHelpers = _serverTracker.getDeadServers();
+                for (ServerInfo serverInfo : deadHelpers) {
+                    _table.removeHelper(serverInfo);
+                    _serverTracker.remove(serverInfo);
+                }
+
+                Console.writeLine("\n Table: ");
+                Console.writeLine(_table.toString());
+
+                Console.writeLine("\n Tracker: ");
+                Console.writeLine(_serverTracker.toString());
+
+
+                try {
+                    Thread.sleep(CHECK_INTERVAL);
+                } catch (InterruptedException e) {
+                }
+
+            }
+
         }
     }
 
@@ -230,25 +375,23 @@ public class NameServer {
             try {
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
 
-                // Obtain the helper to be registered, and add it.
+                // Obtain the helper to be registered, and add it to the table and server tracker.
                 ServerInfo serverInfo = messenger.receiveServerInfo();
                 String categoryAssigned = _table.addHelper(serverInfo);
+                _serverTracker.add(serverInfo);
 
                 // Inform the helper which category it is responsible for.
                 messenger.sendString(categoryAssigned);
 
                 // Print the registration on terminal.
                 Console.writeLine(_clientSocket.getInetAddress().getHostAddress() + " at " + _clientSocket.getPort() + " is registered and assigned category " + categoryAssigned);
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 Console.writeLine("IO error in registration worker. ");
-            }
-            finally {
+            } finally {
                 try {
                     _clientSocket.close();
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
                 }
             }
@@ -277,16 +420,13 @@ public class NameServer {
 
                 // Send these helpers to the requester.
                 messenger.sendServerInfoArray(helpers);
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 Console.writeLine("IO error in mapping helper lookup worker. ");
-            }
-            finally {
+            } finally {
                 try {
                     _clientSocket.close();
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
                 }
             }
@@ -308,20 +448,17 @@ public class NameServer {
                 String category = messenger.receiveString();
 
                 // Borrow that many helpers from the table.
-                ServerInfo helper =_table.borrowHelper(category);
+                ServerInfo helper = _table.borrowHelper(category);
 
                 // Send these helpers to the requester.
                 messenger.sendServerInfo(helper);
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 Console.writeLine("IO error in one categoried helper lookup worker. ");
-            }
-            finally {
+            } finally {
                 try {
                     _clientSocket.close();
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
                 }
             }
@@ -348,20 +485,49 @@ public class NameServer {
 
                 // Send these helpers to the requester.
                 messenger.sendServerInfoArray(helpers);
-            }
-            catch (IOException e) {
+            } catch (IOException e) {
                 Console.writeLine("IO error in categoried helper set lookup worker. ");
-            }
-            finally {
+            } finally {
                 try {
                     _clientSocket.close();
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " is closed. ");
-                }
-                catch (IOException e) {
+                } catch (IOException e) {
                     Console.writeLine("Socket to client " + _clientSocket.getInetAddress().getHostAddress() + ":" + _clientSocket.getPort() + " failed to close. ");
                 }
             }
         }
+    }
+
+    static class HelperReturnWorker extends Thread {
+        Socket _requesterSocket;
+
+        public HelperReturnWorker(Socket requesterSocket) {
+            _requesterSocket = requesterSocket;
+        }
+
+        public void run() {
+
+            try {
+                Console.writeLine("Start helper returning");
+                TcpMessenger messenger = new TcpMessenger(_requesterSocket);
+                ServerInfo serverInfo = messenger.receiveServerInfo();
+                String category = messenger.receiveString();
+                _table.returnHelper(serverInfo, category);
+                Console.writeLine("Helper on " + serverInfo + " is returned.\n");
+            } catch (IOException e) {
+                Console.writeLine("IO error in helper returning worker. ");
+            } finally {
+                try {
+                    _requesterSocket.close();
+                    Console.writeLine("Socket to client " + _requesterSocket.getInetAddress().getHostAddress() + ":" + _requesterSocket.getPort() + " is closed. ");
+                } catch (IOException e) {
+                    Console.writeLine("Socket to client " + _requesterSocket.getInetAddress().getHostAddress() + ":" + _requesterSocket.getPort() + " failed to close. ");
+                }
+            }
+
+
+        }
+
     }
 
 
