@@ -171,9 +171,9 @@ public class NameServer {
         public synchronized String toString() {
             StringBuilder builder = new StringBuilder();
             for (Map.Entry<String, ArrayList<Pair<ServerInfo, Integer>>> entry : _table.entrySet()) {
-                builder.append(entry.getKey() + ": ");
+                builder.append(entry.getKey() + ":\t");
                 for (Pair<ServerInfo, Integer> pair : entry.getValue()) {
-                    builder.append(pair.toString() + " || ");
+                    builder.append(pair.toString() + "\t|| ");
                 }
                 builder.append("\n");
             }
@@ -242,7 +242,7 @@ public class NameServer {
     public static void main(String[] args) throws IOException {
 
         // Generate a categories
-        ArrayList<String> categories = MiniGoogleUtilities.generateSimpleCategories();
+        ArrayList<String> categories = MiniGoogleUtilities.generateCategories();
 
         // Create the table with the categories as keys, and value being empty.
         _table = new MiniGoogleNameServerTable(categories);
@@ -479,7 +479,7 @@ public class NameServer {
 
                 // Borrow that many helpers from the table.
                 ArrayList<ServerInfo> helpers = new ArrayList<ServerInfo>();
-                for (String category : MiniGoogleUtilities.generateSimpleCategories()) {
+                for (String category : MiniGoogleUtilities.generateCategories()) {
                     helpers.add(_table.borrowHelper(category));
                 }
 

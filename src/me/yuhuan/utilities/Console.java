@@ -31,4 +31,8 @@ public class Console {
     public static int readInt() throws IOException {
         return Integer.parseInt(readLine());
     }
+
+    public static void clear() throws IOException {
+        Runtime.getRuntime().exec("clear");
+    }
 }

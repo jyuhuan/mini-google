@@ -9,13 +9,8 @@ package me.yuhuan.io;
  * Created by Yuhuan Jiang on 11/30/14.
  */
 public class File {
-    public static String extractFileNameFromPath(String path, Boolean withExtention) {
+    public static String extractFileNameFromPath(String path) {
         java.io.File f = new java.io.File(path);
-        String nameWithExtension = f.getName();
-        if (!withExtention) {
-            int dotPos = nameWithExtension.indexOf('.');
-            nameWithExtension = nameWithExtension.substring(0, dotPos);
-        }
-        return nameWithExtension;
+        return f.getName();
     }
 }

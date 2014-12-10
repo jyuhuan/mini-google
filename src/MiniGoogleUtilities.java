@@ -3,16 +3,15 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
-import me.yuhuan.collections.MultiValueHashTable;
 import me.yuhuan.collections.Pair;
 import me.yuhuan.net.core.ServerInfo;
 import me.yuhuan.net.core.TcpMessenger;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Created by Yuhuan Jiang on 11/27/14.
@@ -29,20 +28,54 @@ public class MiniGoogleUtilities {
         return hashCode;
     }
 
+    public static boolean isWord(String word) {
+        if (word.length() < 1) return false;
+        for (Character c : word.toCharArray()) {
+            if (!contains("abcdefghijklmnopqrstuvwxyz0123456789", c)) return false;
+        }
+        return true;
+    }
 
-    public static ArrayList<String> generateSimpleCategories() {
+    public static String postingsToString(ArrayList<Pair<String, Integer>> postings) {
+        if (postings == null || postings.size() == 0) return "";
+        StringBuilder builder = new StringBuilder();
+        for (Pair<String, Integer> pair : postings) {
+            builder.append("|");
+            builder.append(pair.item1);
+            builder.append(",");
+            builder.append(pair.item2);
+        }
+        return builder.substring(1);
+    }
+
+    public static ArrayList<Pair<String, Integer>> stringToPostings(String s) {
+        if (s.equals("")) return new ArrayList<Pair<String, Integer>>();
+        ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
+        String[] stringsOfPairs = s.split("\\|");
+        for (String stringOfPair : stringsOfPairs) {
+            String[] itemStrings = stringOfPair.split(",");
+            postings.add(new Pair<String, Integer>(itemStrings[0], Integer.parseInt(itemStrings[1])));
+        }
+        return postings;
+    }
+
+    public static String getDirectoryName(String pathToDirectory) {
+        String[] parts = pathToDirectory.split(Pattern.quote(File.separator));
+        return parts[parts.length - 1];
+    }
+
+    public static ArrayList<String> generateCategories() {
         if (categories != null) return categories;
-
         categories = new ArrayList<String>();
-        categories.add("a");
-        categories.add("b");
-        categories.add("c");
-        categories.add("d");
+        categories.add("c1");
+        categories.add("c2");
+        categories.add("c3");
+        categories.add("c4");
         categories.add("#");
         return categories;
     }
 
-    public static ArrayList<String> generateCategories() {
+    /*public static ArrayList<String> generateCategories() {
         if (categories != null) return categories;
 
         HashMap<String, Integer> sizes = new HashMap<String, Integer>() {};
@@ -84,17 +117,40 @@ public class MiniGoogleUtilities {
         }
 
         return categories;
+    }*/
+
+    /*public static ArrayList<String> generateCategories() {
+        if (categories != null) return categories;
+
+        categories = new ArrayList<String>();
+        for (Character character : "abcdefghijklmnopqrstuvwxyz0123456789#".toCharArray()) {
+            categories.add(String.valueOf(character));
+        }
+        return categories;
+    }*/
+
+
+    public static boolean contains(String s, char c) {
+        return s.indexOf(c) >= 0;
     }
 
     public static String getCategoryOf(String word) {
         char firstLetter = word.charAt(0);
-        if (firstLetter == 'a') return "a";
-        else if (firstLetter == 'b') return "b";
-        else if (firstLetter == 'c') return "c";
-        else if (firstLetter == 'd') return "d";
-        else if ("0123456789".indexOf(firstLetter) >= 0) return "#";
+
+        if (contains("scp", firstLetter)) return "c1";
+        else if (contains("bdamt", firstLetter)) return "c2";
+        else if (contains("rfeihlg", firstLetter)) return "c3";
+        else if (contains("wuovnjkqyxz", firstLetter)) return "c4";
+        else if (contains("0123456789", firstLetter)) return "#";
         else return "UNK";
     }
+
+    /*public static String getCategoryOf(String word) {
+        char firstLetter = word.charAt(0);
+        if ("abcdefghijklmnopqrstuvwxyz".indexOf(firstLetter) >= 0) return String.valueOf(firstLetter);
+        else if ("0123456789".indexOf(firstLetter) >= 0) return "#";
+        else return "UNK";
+    }*/
 
     public static ArrayList<ServerInfo> borrowCategorylessHelpers(int numHelpersNeeded) throws IOException {
         if (numHelpersNeeded == 0) return new ArrayList<ServerInfo>();

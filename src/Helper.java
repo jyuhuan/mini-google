@@ -160,11 +160,16 @@ public class Helper {
     }
 
     static void returnToNameServer() throws IOException {
-        Socket socketToNameServer = new Socket(_nameServerIpAddress, _nameServerPortNumber);
-        TcpMessenger messenger = new TcpMessenger(socketToNameServer);
-        messenger.sendTag(Tags.REQUEST_HELPER_RETURN);
-        messenger.sendServerInfo(new ServerInfo(_myIpAddress, _myPortNumber));
-        messenger.sendString(_category);
+        try {
+            Socket socketToNameServer = new Socket(_nameServerIpAddress, _nameServerPortNumber);
+            TcpMessenger messenger = new TcpMessenger(socketToNameServer);
+            messenger.sendTag(Tags.REQUEST_HELPER_RETURN);
+            messenger.sendServerInfo(new ServerInfo(_myIpAddress, _myPortNumber));
+            messenger.sendString(_category);
+        }
+        catch (Exception e) {
+            int aaa = 0;
+        }
     }
 
     public static void main(String[] args) throws IOException {
@@ -223,7 +228,14 @@ public class Helper {
     private static HashMap<String, Integer> mapping(String[] lines) {
         HashMap<String, Integer> counts = new HashMap<String, Integer>();
         for (String line : lines) {
-            String[] words = line.split("\\s+");
+            String[] rawWords = line.split("\\s+");
+
+            // valid words. without @#$ and other blank words
+            ArrayList<String> words = new ArrayList<String>();
+            for (String word : rawWords) {
+                if (MiniGoogleUtilities.isWord(word)) words.add(word);
+            }
+
             for (String word : words) {
                 int count = counts.containsKey(word) ? counts.get(word) : 0;
                 counts.put(word, count + 1);
@@ -252,7 +264,7 @@ public class Helper {
                 }
 
             } catch (IOException e) {
-                Console.writeLine("IO error in indexing mapping worker. \n");
+                Console.writeLine("IO error in the I'm Alive! worker. \n");
             }
         }
     }
@@ -267,6 +279,14 @@ public class Helper {
             _clientSocket = clientSocket;
         }
 
+        String _workingPath;
+        int _transactionId;
+        String _masterIp;
+        int _masterPort;
+        boolean _didWriteFile = false;
+        boolean _didReportToMaster = false;
+        boolean _didReturnToNs = false;
+
         public void run() {
 
             try {
@@ -276,14 +296,19 @@ public class Helper {
 
                 // Obtain the path to the file segment.
                 String pathToSeg = messenger.receiveString();
+                _workingPath = pathToSeg;
 
                 // Obtain the transaction ID.
                 int transactionId = messenger.receiveInt();
                 Console.writeLine("transaction ID = " + transactionId);
+                _transactionId = transactionId;
 
                 // Obtain the IP and Port# of the master.
                 String masterIpAddress = messenger.receiveString();
                 int masterPortNumber = messenger.receiveInt();
+
+                _masterIp = masterIpAddress;
+                _masterPort = masterPortNumber;
 
                 // Create a socket and a messenger for this helper to report finishing to.
                 Socket socketToMaster = new Socket(masterIpAddress, masterPortNumber);
@@ -298,18 +323,33 @@ public class Helper {
                 String[] outputLines = linesForOutput.toArray(new String[linesForOutput.size()]);
 
                 // Save to file
-                String pathToPartialCount = MAPPER_OUT_DIR + transactionId + "/" + File.extractFileNameFromPath(pathToSeg, false);
+                String pathToPartialCount = MAPPER_OUT_DIR + transactionId + "/" + File.extractFileNameFromPath(pathToSeg);
                 TextFile.write(pathToPartialCount, outputLines);
+                _didWriteFile = true;
 
                 // Inform the master (client) that the work is done
                 messengerToMaster.sendString(pathToSeg);
+                _didReportToMaster = true;
 
                 // Return myself to name server
                 returnToNameServer();
+                _didReturnToNs = true;
 
-                Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + "\n");
+                Console.writeLine("Finished indexing mapping with transaction ID = " + transactionId + "\n\t" +
+                                " Working path = " + _workingPath + "\n\t" +
+                                "Trans ID = " + _transactionId + "\n"
+                );
+
             } catch (IOException e) {
-                Console.writeLine("IO error in indexing mapping worker. \n");
+                Console.writeLine("IO error in indexing mapping worker. \n\t" +
+                        e.getMessage() + "\n\t" +
+                        " Working path = " + _workingPath + "\n\t" +
+                                "Trans ID = " + _transactionId + "\n\t" +
+                                "Master = " + _masterIp + ":" + _masterPort + "\n\t" +
+                                "Did write file = " + _didWriteFile + "\n\t" +
+                                "Did report to master = " + _didReportToMaster + "\n\t" +
+                                "Did return to NS = " + _didReturnToNs + "\n"
+                );
             } finally {
                 try {
                     _clientSocket.close();
@@ -334,7 +374,6 @@ public class Helper {
         public void run() {
             try {
                 Console.write("Start indexing reducing. ");
-
                 TcpMessenger messenger = new TcpMessenger(_clientSocket);
 
                 // Obtain the transactionId that points to the directory where mappers have output the partial counts.
@@ -439,6 +478,7 @@ public class Helper {
                 // Create a socket and a messenger for this helper to report finishing to.
                 Socket socketToMaster = new Socket(masterIpAddress, masterPortNumber);
                 TcpMessenger messengerToMaster = new TcpMessenger(socketToMaster);
+                messengerToMaster.sendString(_category);
 
 
                 // Look up table, and output result.
@@ -447,7 +487,13 @@ public class Helper {
                     Console.writeLine("\t" + _invertedIndex.get(keyword));
                 }
 
-                messengerToMaster.sendString(_category);
+                // Return the postings to master
+                messengerToMaster.sendInt(keywords.size());
+                for (String keyword : keywords) {
+                    messengerToMaster.sendString(keyword);
+                    String postingsString = MiniGoogleUtilities.postingsToString(_invertedIndex.get(keyword));
+                    messengerToMaster.sendString(postingsString);
+                }
 
                 // Return myself to name server
                 returnToNameServer();

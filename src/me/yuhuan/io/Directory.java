@@ -21,6 +21,15 @@ public class Directory {
         return result;
     }
 
+    public static ArrayList<String> getDirectories(String pathToDirectory) {
+        ArrayList<String> result = new ArrayList<String>();
+        File directory = new File(pathToDirectory);
+        for (File file : directory.listFiles()) {
+            if (file.isDirectory()) result.add(file.getAbsolutePath());
+        }
+        return result;
+    }
+
     public static Boolean createDirectory(String pathToDirectory) {
         return (new File(pathToDirectory)).mkdir();
     }
