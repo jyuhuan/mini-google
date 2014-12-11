@@ -392,6 +392,9 @@ public class MiniGoogleServer {
                     _unfinishedJobs.add(category);
                 }
 
+                // Result container
+                HashMap<String, ArrayList<Helper.PostingItem>> results = new HashMap<String, ArrayList<Helper.PostingItem>>();
+
 
                 // Start to collect results.
                 while (_unfinishedJobs.size() != 0) {
@@ -412,10 +415,9 @@ public class MiniGoogleServer {
                             for (int i = 0; i < numWords; i++) {
                                 String keyword = reducingHelperMessenger.receiveString();
                                 String postingsString = reducingHelperMessenger.receiveString();
-                                ArrayList<Pair<String, Integer>> postings = MiniGoogleUtilities.stringToPostings(postingsString);
-                                Console.writeLine(keyword + " -> " + postings.toString());
+                                ArrayList<Helper.PostingItem> postings = MiniGoogleUtilities.stringToPostings(postingsString);
+                                results.put(keyword, postings);
                             }
-
                             _unfinishedJobs.remove(finishedCategory);
                         }
                     }
@@ -433,6 +435,15 @@ public class MiniGoogleServer {
                         }
                     }
                 }
+
+                // done receiving all results. Send to client
+                for (HashMap.Entry<String, ArrayList<Helper.PostingItem>> entry : results.entrySet()) {
+                    String keyword = entry.getKey();
+                    ArrayList<Helper.PostingItem> postings = entry.getValue();
+                    messengerToRequester.sendString(keyword);
+                    messengerToRequester.sendString(MiniGoogleUtilities.postingsToString(postings));
+                }
+
             }
             catch (IOException e) {
                 Console.writeLine("IO error in searching master. ");

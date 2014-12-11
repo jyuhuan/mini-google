@@ -9,6 +9,7 @@ import me.yuhuan.utilities.Console;
 
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * Created by Yuhuan Jiang on 12/10/14.
@@ -38,7 +39,14 @@ public class DemoProgram {
                 Console.write("Keywords: ");
                 String keywords = Console.readLine();
                 String[] keywordArray = keywords.split("\\s+");
-                MiniGoogleLib.requestSearching(keywordArray);
+                HashMap<String, ArrayList<Helper.PostingItem>> result = MiniGoogleLib.requestSearching(keywordArray);
+
+                for (HashMap.Entry<String, ArrayList<Helper.PostingItem>> entry : result.entrySet()) {
+                    Console.writeLine("Result: ");
+                    for (Helper.PostingItem item : entry.getValue()) {
+                        Console.writeLine("  | " + item.getDocumentName());
+                    }
+                }
             }
             else if (userChoice == 3) {
                 Console.writeLine("Indexing all documents");

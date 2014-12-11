@@ -16,11 +16,13 @@ package me.yuhuan.utilities;
 public class UidGenerator {
     private static Integer _id;
     public static int next() {
-        if (_id == null) return 0;
+        if (_id == null) {
+            _id = 0;
+        }
         else {
             _id++;
-            return _id;
         }
+        return _id;
     }
 
 }

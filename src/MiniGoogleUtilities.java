@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
  */
 public class MiniGoogleUtilities {
 
+
     public static ArrayList<String> categories = null;
 
     public static int getHashCodeOf(String word) {
@@ -30,31 +31,34 @@ public class MiniGoogleUtilities {
 
     public static boolean isWord(String word) {
         if (word.length() < 1) return false;
+
+        // TODO: stop words
+
         for (Character c : word.toCharArray()) {
             if (!contains("abcdefghijklmnopqrstuvwxyz0123456789", c)) return false;
         }
         return true;
     }
 
-    public static String postingsToString(ArrayList<Pair<String, Integer>> postings) {
+    public static String postingsToString(ArrayList<Helper.PostingItem> postings) {
         if (postings == null || postings.size() == 0) return "";
         StringBuilder builder = new StringBuilder();
-        for (Pair<String, Integer> pair : postings) {
+        for (Helper.PostingItem posting : postings) {
             builder.append("|");
-            builder.append(pair.item1);
+            builder.append(posting.getDocumentName());
             builder.append(",");
-            builder.append(pair.item2);
+            builder.append(posting.getFrequency());
         }
         return builder.substring(1);
     }
 
-    public static ArrayList<Pair<String, Integer>> stringToPostings(String s) {
-        if (s.equals("")) return new ArrayList<Pair<String, Integer>>();
-        ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
+    public static ArrayList<Helper.PostingItem> stringToPostings(String s) {
+        if (s.equals("")) return new ArrayList<Helper.PostingItem>();
+        ArrayList<Helper.PostingItem> postings = new ArrayList<Helper.PostingItem>();
         String[] stringsOfPairs = s.split("\\|");
         for (String stringOfPair : stringsOfPairs) {
             String[] itemStrings = stringOfPair.split(",");
-            postings.add(new Pair<String, Integer>(itemStrings[0], Integer.parseInt(itemStrings[1])));
+            postings.add(new Helper.PostingItem(itemStrings[0], Integer.parseInt(itemStrings[1])));
         }
         return postings;
     }

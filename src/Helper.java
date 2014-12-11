@@ -32,6 +32,32 @@ import java.util.HashMap;
  */
 public class Helper {
 
+    public static class PostingItem implements Comparable<PostingItem> {
+        Pair<String, Integer> _item;
+
+        public PostingItem(String documentName, Integer frequency) {
+            _item = new Pair<String, Integer>(documentName, frequency);
+        }
+
+        public String getDocumentName() { return _item.item1; }
+
+        public int getFrequency() { return _item.item2; }
+
+        @Override
+        public int compareTo(PostingItem that) {
+            int thisFreq = this._item.item2;
+            int thatFreq = that._item.item2;
+            return thisFreq - thatFreq;
+        }
+
+        @Override
+        public String toString() {
+            return _item.toString();
+        }
+    }
+
+
+
     /**
      * Represents an inverted index (II) in MapReduce.
      * Allows loading from and saving to files.
@@ -42,13 +68,13 @@ public class Helper {
         /**
          * [("word", [("doc1", 123), ("doc2", 90), ... ]), ...]
          */
-        HashMap<String, ArrayList<Pair<String, Integer>>> _table;
+        HashMap<String, ArrayList<PostingItem>> _table;
 
         /**
          * Initializes an empty inverted index.
          */
         public InvertedIndex() {
-            _table = new HashMap<String, ArrayList<Pair<String, Integer>>>();
+            _table = new HashMap<String, ArrayList<PostingItem>>();
         }
 
         /**
@@ -56,23 +82,23 @@ public class Helper {
          * @param filePath The path to the II's file.
          */
         public InvertedIndex(String filePath) throws IOException {
-            _table = new HashMap<String, ArrayList<Pair<String, Integer>>>();
+            _table = new HashMap<String, ArrayList<PostingItem>>();
             String[] lines = TextFile.read(filePath);
             for (String line : lines) {
                 String[] parts = line.split(",");
                 String word = parts[0];
-                ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
+                ArrayList<PostingItem> postings = new ArrayList<PostingItem>();
                 for (int i = 1; i < parts.length; i++) {
                     String[] docIdAndCount = parts[i].split("\\|");
                     String docId = docIdAndCount[0];
                     int count = Integer.parseInt(docIdAndCount[1]);
-                    postings.add(new Pair<String, Integer>(docId, count));
+                    postings.add(new PostingItem(docId, count));
                 }
                 _table.put(word, postings);
             }
         }
 
-        public ArrayList<Pair<String, Integer>> get(String word) {
+        public ArrayList<PostingItem> get(String word) {
             return _table.get(word);
         }
 
@@ -88,10 +114,10 @@ public class Helper {
                     int count = pair.getValue();
 
                     if (_table.containsKey(word)) {
-                        _table.get(word).add(new Pair<String, Integer>(documentName, count));
+                        _table.get(word).add(new PostingItem(documentName, count));
                     } else {
-                        ArrayList<Pair<String, Integer>> postings = new ArrayList<Pair<String, Integer>>();
-                        postings.add(new Pair<String, Integer>(documentName, count));
+                        ArrayList<PostingItem> postings = new ArrayList<PostingItem>();
+                        postings.add(new PostingItem(documentName, count));
                         _table.put(word, postings);
                     }
                 }
@@ -107,17 +133,17 @@ public class Helper {
          */
         public void saveToFile(String filePath) throws IOException{
             ArrayList<String> lines = new ArrayList<String>();
-            for (HashMap.Entry<String, ArrayList<Pair<String, Integer>>> pair : _table.entrySet()) {
+            for (HashMap.Entry<String, ArrayList<PostingItem>> pair : _table.entrySet()) {
                 String word = pair.getKey();
-                ArrayList<Pair<String, Integer>> postings = pair.getValue();
+                ArrayList<PostingItem> postings = pair.getValue();
 
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.append(word);
                 stringBuilder.append(",");
-                for (Pair<String, Integer> posting : postings) {
-                    stringBuilder.append(posting.item1);
+                for (PostingItem posting : postings) {
+                    stringBuilder.append(posting.getDocumentName());
                     stringBuilder.append("|");
-                    stringBuilder.append(posting.item2);
+                    stringBuilder.append(posting.getFrequency());
                     stringBuilder.append(",");
                 }
                 String postingsString = stringBuilder.substring(0, stringBuilder.length() - 1);

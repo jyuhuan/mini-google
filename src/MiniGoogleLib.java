@@ -3,11 +3,18 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
+import javafx.geometry.Pos;
+import me.yuhuan.collections.Pair;
 import me.yuhuan.net.core.TcpMessenger;
+import me.yuhuan.utilities.Console;
 import me.yuhuan.utilities.UidGenerator;
+import sun.util.resources.cldr.wal.CurrencyNames_wal;
 
 import java.io.IOException;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -27,10 +34,12 @@ public class MiniGoogleLib {
 
         messenger.sendInt(Tags.REQUEST_INDEXING);
         messenger.sendString(path);
-        messenger.sendInt(UidGenerator.next());
+
+        int transactionId = UidGenerator.next();
+        messenger.sendInt(transactionId);
     }
 
-    public static void requestSearching(String[] keywords) throws IOException {
+    public static HashMap<String, ArrayList<Helper.PostingItem>> requestSearching(String[] keywords) throws IOException {
         _miniGoogleIp = "127.0.0.1";
         _miniGooglePort = 5555;
 
@@ -41,5 +50,16 @@ public class MiniGoogleLib {
         for (String keyword : keywords) {
             messenger.sendString(keyword);
         }
+
+        HashMap<String, ArrayList<Helper.PostingItem>> result = new HashMap<String, ArrayList<Helper.PostingItem>>();
+
+        for (int i = 0; i < keywords.length; i++) {
+            String curKeyword = messenger.receiveString();
+            ArrayList<Helper.PostingItem> curPostings = MiniGoogleUtilities.stringToPostings(messenger.receiveString());
+            Collections.sort(curPostings, Collections.reverseOrder());
+            result.put(curKeyword, curPostings);
+        }
+
+        return result;
     }
 }
