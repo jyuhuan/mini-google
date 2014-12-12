@@ -3,7 +3,6 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
-import me.yuhuan.collections.MultiValueHashTable;
 import me.yuhuan.collections.Pair;
 import me.yuhuan.io.TextFile;
 import me.yuhuan.net.Utilities;
@@ -16,7 +15,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -26,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class NameServer {
 
     // Configurations
-    private static final int PORT_NUMBER = 12345; // TODO: change to 0
+    private static final int PORT_NUMBER = 0;
     private static final int CHECK_INTERVAL = 3000;
     private static final long HELPER_ALIVE_THREASHOLD = 8000;
 
@@ -324,9 +322,9 @@ public class NameServer {
             } finally {
                 try {
                     _helperSocket.close();
-                    Console.writeLine("Socket to client " + _helperSocket.getInetAddress().getHostAddress() + ":" + _helperSocket.getPort() + " is closed. ");
+                    //Console.writeLine("Socket to client " + _helperSocket.getInetAddress().getHostAddress() + ":" + _helperSocket.getPort() + " is closed. ");
                 } catch (IOException e) {
-                    Console.writeLine("Socket to client " + _helperSocket.getInetAddress().getHostAddress() + ":" + _helperSocket.getPort() + " failed to close. ");
+                    //Console.writeLine("Socket to client " + _helperSocket.getInetAddress().getHostAddress() + ":" + _helperSocket.getPort() + " failed to close. ");
                 }
             }
         }
@@ -347,8 +345,8 @@ public class NameServer {
                 Console.writeLine("\n Table: ");
                 Console.writeLine(_table.toString());
 
-                Console.writeLine("\n Tracker: ");
-                Console.writeLine(_serverTracker.toString());
+                //Console.writeLine("\n Tracker: ");
+                //Console.writeLine(_serverTracker.toString());
 
 
                 try {

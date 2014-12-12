@@ -8,6 +8,7 @@ import me.yuhuan.utilities.Console;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by Yuhuan Jiang on 12/10/14.
@@ -39,8 +40,9 @@ public class DemoProgram {
                 String[] keywordArray = keywords.split("\\s+");
                 HashMap<String, ArrayList<Helper.PostingItem>> result = MiniGoogleLib.requestSearching(keywordArray);
 
-                for (HashMap.Entry<String, ArrayList<Helper.PostingItem>> entry : result.entrySet()) {
-                    Console.writeLine("Result: ");
+                for (Map.Entry<String, ArrayList<Helper.PostingItem>> entry : result.entrySet()) {
+                    String keyword = entry.getKey();
+                    Console.writeLine("Result for word \"" + keyword + "\":");
                     for (Helper.PostingItem item : entry.getValue()) {
                         Console.writeLine("  | " + item.getDocumentName());
                     }

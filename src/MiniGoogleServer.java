@@ -39,8 +39,16 @@ public class MiniGoogleServer {
      */
     static final String MAPPER_OUT_DIR = "working/mappers/";
     static final int MAX_WAIT_TIME_FOR_HELPER = 10000;
+    static final int MAX_TRIAL_NUM = 3;
+
+    static ServerInfo _nameServerInfo;
 
     public static void main(String[] args) throws IOException {
+
+        String[] lines = TextFile.read("name_server_info");
+        String nameServerIpAddress = lines[0];
+        int nameServerPortNumber = Integer.parseInt(lines[1]);
+        _nameServerInfo = new ServerInfo(nameServerIpAddress, nameServerPortNumber);
 
         // Creates a socket that the server listens to.
         // The port number is automatically assigned by the OS.
@@ -109,38 +117,48 @@ public class MiniGoogleServer {
         }
 
         public void requestMapping(ServerInfo helper, String pathToWorkOn, String masterIpAddress, int masterPortNumber) throws IOException {
-            Socket socketToCurHelper = new Socket(helper.IPAddressString(), helper.portNumber);
-            TcpMessenger messengerToCurHelper = new TcpMessenger(socketToCurHelper);
+            try {
+                Socket socketToCurHelper = new Socket(helper.IPAddressString(), helper.portNumber);
+                TcpMessenger messengerToCurHelper = new TcpMessenger(socketToCurHelper);
 
-            // Send request indexing mapping to helper.
-            messengerToCurHelper.sendTag(Tags.REQUEST_INDEXING_MAPPING);
+                // Send request indexing mapping to helper.
+                messengerToCurHelper.sendTag(Tags.REQUEST_INDEXING_MAPPING);
 
-            // Send path to current segment to helper.
-            messengerToCurHelper.sendString(pathToWorkOn);
+                // Send path to current segment to helper.
+                messengerToCurHelper.sendString(pathToWorkOn);
 
-            // Send transaction ID to helper.
-            messengerToCurHelper.sendInt(_transactionId);
+                // Send transaction ID to helper.
+                messengerToCurHelper.sendInt(_transactionId);
 
-            // Send the master IP and Port# to helper for it to report to.
-            messengerToCurHelper.sendString(masterIpAddress);
-            messengerToCurHelper.sendInt(masterPortNumber);
+                // Send the master IP and Port# to helper for it to report to.
+                messengerToCurHelper.sendString(masterIpAddress);
+                messengerToCurHelper.sendInt(masterPortNumber);
+
+                socketToCurHelper.close();
+            }
+            catch (IOException e) { }
         }
 
         public void requestReducing(ServerInfo helper, String documentName, String masterIpAddress, int masterPortNumber) throws IOException {
-            Socket socketToHelper = new Socket(helper.IPAddressString(), helper.portNumber);
-            TcpMessenger messenger = new TcpMessenger(socketToHelper);
+            try {
+                Socket socketToHelper = new Socket(helper.IPAddressString(), helper.portNumber);
+                TcpMessenger messenger = new TcpMessenger(socketToHelper);
 
-            messenger.sendTag(Tags.REQUEST_INDEXING_REDUCING);
+                messenger.sendTag(Tags.REQUEST_INDEXING_REDUCING);
 
-            // Send transaction ID to helper. The helper will use it to locate the partial count directory.
-            messenger.sendInt(_transactionId);
+                // Send transaction ID to helper. The helper will use it to locate the partial count directory.
+                messenger.sendInt(_transactionId);
 
-            // Send the document name so that the reducer can create the postings.
-            messenger.sendString(documentName);
+                // Send the document name so that the reducer can create the postings.
+                messenger.sendString(documentName);
 
-            // Send the master IP and Port# to helper for it to report to.
-            messenger.sendString(masterIpAddress);
-            messenger.sendInt(masterPortNumber);
+                // Send the master IP and Port# to helper for it to report to.
+                messenger.sendString(masterIpAddress);
+                messenger.sendInt(masterPortNumber);
+
+                socketToHelper.close();
+            }
+            catch (IOException e) { }
         }
 
         public void run() {
@@ -160,7 +178,7 @@ public class MiniGoogleServer {
                 ServerSocket masterServerSocketForMapping = new ServerSocket(0, 200);
                 int masterPortNumberForMapping = Utilities.getMyPortNumber(masterServerSocketForMapping);
 
-                //masterServerSocketForMapping.setSoTimeout(MAX_WAIT_TIME_FOR_HELPER);
+                masterServerSocketForMapping.setSoTimeout(MAX_WAIT_TIME_FOR_HELPER);
 
                 // Create a messenger to the one who sent the indexing request
                 TcpMessenger messengerToRequester = new TcpMessenger(_requesterSocket);
@@ -182,7 +200,7 @@ public class MiniGoogleServer {
                 int numHelpersNeeded = pathsToSegments.size();
 
                 // Contact name server, and borrow that many helpers.
-                ArrayList<ServerInfo> helpers = MiniGoogleUtilities.borrowCategorylessHelpers(numHelpersNeeded);
+                ArrayList<ServerInfo> helpers = MiniGoogleUtilities.borrowCategorylessHelpers(numHelpersNeeded, _nameServerInfo);
 
                 // Send each segment to one helper, and request mapping.
                 for (int i = 0; i < numHelpersNeeded; i++) {
@@ -197,7 +215,8 @@ public class MiniGoogleServer {
                 }
 
                 // Start to collect results.
-                while (_unfinishedMappingJobs.size() != 0) {
+                int numTrialsForMapping = 0;
+                while (_unfinishedMappingJobs.size() != 0 && numTrialsForMapping < MAX_TRIAL_NUM) {
                     Console.writeLine("@@@@@@@@@@@@@@@@@@ trying...");
                     try {
                         while (_unfinishedMappingJobs.size() != 0) {
@@ -214,7 +233,7 @@ public class MiniGoogleServer {
                             _unfinishedMappingJobs.remove(finishedPath);
                         }
                     }
-                    catch (SocketTimeoutException e) {
+                    catch (Exception e) {
                         // This is the point where the master's server socket does not received enough responses,
                         // within the time out. This catch branch does the following:
                         //    (1) Replace each failed helper.
@@ -222,7 +241,7 @@ public class MiniGoogleServer {
 
                         // Get all failed helpers.
 
-                        // TODO: remove this. Debugging purpose only.
+                        numTrialsForMapping++;
                         Console.writeLine("\n");
                         for (String job : _unfinishedMappingJobs) {
                             Console.writeLine(job);
@@ -234,7 +253,7 @@ public class MiniGoogleServer {
 
                         // Borrow new helpers.
                         int numFailedHelpers = _unfinishedMappingJobs.size();
-                        ArrayList<ServerInfo> newHelpers = MiniGoogleUtilities.borrowCategorylessHelpers(numFailedHelpers);
+                        ArrayList<ServerInfo> newHelpers = MiniGoogleUtilities.borrowCategorylessHelpers(numFailedHelpers, _nameServerInfo);
 
                         // Replace helpers and start jobs on new ones.
                         for (int i = 0; i < numFailedHelpers; i++) {
@@ -247,6 +266,12 @@ public class MiniGoogleServer {
                     }
                 }
 
+                if (numTrialsForMapping == MAX_TRIAL_NUM) {
+                    Console.writeLine("Give up.");
+                    throw new IOException("Mapping failed. ");
+                }
+
+                masterServerSocketForMapping.close();
                 Console.writeLine("Mapping done... \n");
 
                 //////////////////////////////
@@ -260,7 +285,7 @@ public class MiniGoogleServer {
                 int masterPortNumberForReducing = Utilities.getMyPortNumber(masterServerSocketForReducing);
                 masterServerSocketForReducing.setSoTimeout(MAX_WAIT_TIME_FOR_HELPER);
 
-                ArrayList<ServerInfo> reducingHelpers = MiniGoogleUtilities.borrowASetOfReducingHelpers();
+                ArrayList<ServerInfo> reducingHelpers = MiniGoogleUtilities.borrowASetOfReducingHelpers(_nameServerInfo);
 
                 for (ServerInfo serverInfo : reducingHelpers) {
                     requestReducing(serverInfo, documentName, masterIpAddress, masterPortNumberForReducing);
@@ -272,7 +297,8 @@ public class MiniGoogleServer {
 
 
                 // Start to collect results.
-                while (_unfinishedReducingJobs.size() != 0) {
+                int numTrialsForReducing = 0;
+                while (_unfinishedReducingJobs.size() != 0 && numTrialsForReducing < MAX_TRIAL_NUM) {
                     Console.writeLine("@@@@@@@@@@@@@@@@@@ trying...");
                     try {
                         while (_unfinishedReducingJobs.size() != 0) {
@@ -289,8 +315,8 @@ public class MiniGoogleServer {
                             _unfinishedReducingJobs.remove(finishedCategory);
                         }
                     }
-                    catch (SocketTimeoutException e) {
-                        // TODO: remove this. Debugging purpose only.
+                    catch (Exception e) {
+                        numTrialsForReducing++;
                         Console.writeLine("\n");
                         for (String job : _unfinishedReducingJobs) {
                             Console.writeLine(job);
@@ -298,20 +324,39 @@ public class MiniGoogleServer {
                         Console.writeLine("\n");
 
                         for (String failedReducingJob : _unfinishedReducingJobs) {
-                            ServerInfo newReducingHelper = MiniGoogleUtilities.borrowOneCategoriedHelper(failedReducingJob);
-                            requestReducing(newReducingHelper, documentName, masterIpAddress, masterPortNumberForReducing);
+                            ServerInfo newReducingHelper = MiniGoogleUtilities.borrowOneCategoriedHelper(failedReducingJob, _nameServerInfo);
+                            if (!newReducingHelper.equals(ServerInfo.createFakeServer())) {
+                                requestReducing(newReducingHelper, documentName, masterIpAddress, masterPortNumberForReducing);
+                            }
                         }
                     }
                 }
 
+                if (numTrialsForReducing == MAX_TRIAL_NUM) {
+                    Console.writeLine("Give up");
+                    throw new IOException("Reducing failed. ");
+                }
+
+
+
                 // delete all intermediate results in this transaction
                 Directory.removeDirectory(MAPPER_OUT_DIR + _transactionId);
 
+                masterServerSocketForReducing.close();
                 Console.writeLine("Reducing done... \n");
+
+                TcpMessenger messenger = new TcpMessenger(_requesterSocket);
+                messenger.sendTag(Tags.MESSAGE_INDEXING_DONE);
 
             }
             catch (IOException e) {
                 Console.writeLine("IO error in indexing master. ");
+                Console.writeLine("\t" + e.getMessage());
+                e.printStackTrace();
+                try{
+                    TcpMessenger messenger = new TcpMessenger(_requesterSocket);
+                    messenger.sendTag(Tags.INDEXING_FAIL);
+                } catch(IOException ex) { }
             }
             finally {
                 try {
@@ -390,9 +435,9 @@ public class MiniGoogleServer {
 
 
                 // For each category, borrow one searching helper from name server.
-                for (HashMap.Entry<String, ArrayList<String>> pair : groups.entrySet()) {
+                for (Map.Entry<String, ArrayList<String>> pair : groups.entrySet()) {
                     String category = pair.getKey();
-                    ServerInfo helper = MiniGoogleUtilities.borrowOneCategoriedHelper(category);
+                    ServerInfo helper = MiniGoogleUtilities.borrowOneCategoriedHelper(category, _nameServerInfo);
                     requestSearching(helper, pair.getValue(), masterIpAddress, masterPortNumber);
                     _unfinishedJobs.add(category);
                 }
@@ -402,7 +447,8 @@ public class MiniGoogleServer {
 
 
                 // Start to collect results.
-                while (_unfinishedJobs.size() != 0) {
+                int numTrialsForSearching = 0;
+                while (_unfinishedJobs.size() != 0 && numTrialsForSearching < MAX_TRIAL_NUM) {
                     Console.writeLine("@@@@@@@@@@@@@@@@@@ trying...");
                     try {
                         while (_unfinishedJobs.size() != 0) {
@@ -426,8 +472,8 @@ public class MiniGoogleServer {
                             _unfinishedJobs.remove(finishedCategory);
                         }
                     }
-                    catch (SocketTimeoutException e) {
-                        // TODO: remove this. Debugging purpose only.
+                    catch (Exception e) {
+                        numTrialsForSearching++;
                         Console.writeLine("\n");
                         for (String job : _unfinishedJobs) {
                             Console.writeLine(job);
@@ -435,19 +481,28 @@ public class MiniGoogleServer {
                         Console.writeLine("\n");
 
                         for (String failedReducingJob : _unfinishedJobs) {
-                            ServerInfo newReducingHelper = MiniGoogleUtilities.borrowOneCategoriedHelper(failedReducingJob);
+                            ServerInfo newReducingHelper = MiniGoogleUtilities.borrowOneCategoriedHelper(failedReducingJob, _nameServerInfo);
                             requestSearching(newReducingHelper, groups.get(failedReducingJob), masterIpAddress, masterPortNumber);
                         }
                     }
                 }
 
+                if (numTrialsForSearching == MAX_TRIAL_NUM) {
+                    Console.writeLine("Give up");
+                    throw new IOException("Searching failed. ");
+                }
+
                 // done receiving all results. Send to client
-                for (HashMap.Entry<String, ArrayList<Helper.PostingItem>> entry : results.entrySet()) {
+                for (Map.Entry<String, ArrayList<Helper.PostingItem>> entry : results.entrySet()) {
                     String keyword = entry.getKey();
                     ArrayList<Helper.PostingItem> postings = entry.getValue();
                     messengerToRequester.sendString(keyword);
                     messengerToRequester.sendString(MiniGoogleUtilities.postingsToString(postings));
                 }
+
+                TcpMessenger messenger = new TcpMessenger(_requesterSocket);
+                messenger.sendTag(Tags.SEARCHING_DONE);
+
 
             }
             catch (IOException e) {

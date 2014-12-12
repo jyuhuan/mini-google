@@ -3,13 +3,10 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
-import javafx.geometry.Pos;
 import me.yuhuan.collections.Pair;
 import me.yuhuan.io.TextFile;
 import me.yuhuan.net.core.TcpMessenger;
-import me.yuhuan.utilities.Console;
 import me.yuhuan.utilities.UidGenerator;
-import sun.util.resources.cldr.wal.CurrencyNames_wal;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -68,6 +65,9 @@ public class MiniGoogleLib {
         int transactionId = UidGenerator.next();
         messenger.sendInt(transactionId);
 
+        int message = messenger.receiveTag();
+        //if (message == Tags.INDEXING_FAIL) return false;
+        if (message == Tags.INDEXING_FAIL) throw new IOException("Failed");
     }
 
     public static HashMap<String, ArrayList<Helper.PostingItem>> requestSearching(String[] keywords) throws IOException {
@@ -108,8 +108,11 @@ public class MiniGoogleLib {
                 _cacheResults.add(curKeyword, curPostings);
             }
 
-        }
+            int message = messenger.receiveTag();
+            //if (message == Tags.INDEXING_FAIL) return false;
+            if (message == Tags.SEARCHING_FAIL) throw new IOException("Failed");
 
+        }
         return result;
     }
 }

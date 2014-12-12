@@ -17,6 +17,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Created by Yuhuan Jiang on 11/27/14.
@@ -68,13 +70,13 @@ public class Helper {
         /**
          * [("word", [("doc1", 123), ("doc2", 90), ... ]), ...]
          */
-        HashMap<String, ArrayList<PostingItem>> _table;
+        volatile ConcurrentHashMap<String, ArrayList<PostingItem>> _table;
 
         /**
          * Initializes an empty inverted index.
          */
         public InvertedIndex() {
-            _table = new HashMap<String, ArrayList<PostingItem>>();
+            _table = new ConcurrentHashMap<String, ArrayList<PostingItem>>();
         }
 
         /**
@@ -82,7 +84,7 @@ public class Helper {
          * @param filePath The path to the II's file.
          */
         public InvertedIndex(String filePath) throws IOException {
-            _table = new HashMap<String, ArrayList<PostingItem>>();
+            _table = new ConcurrentHashMap<String, ArrayList<PostingItem>>();
             String[] lines = TextFile.read(filePath);
             for (String line : lines) {
                 String[] parts = line.split(",");
@@ -109,7 +111,7 @@ public class Helper {
          */
         public void mergeWith(HashMap<String, Integer> more, String documentName) {
             try {
-                for (HashMap.Entry<String, Integer> pair : more.entrySet()) {
+                for (Map.Entry<String, Integer> pair : more.entrySet()) {
                     String word = pair.getKey();
                     int count = pair.getValue();
 
@@ -131,9 +133,9 @@ public class Helper {
          * Saves the inverted index to a text file.
          * @param filePath Where to save.
          */
-        public void saveToFile(String filePath) throws IOException{
+        public synchronized void saveToFile(String filePath) throws IOException{
             ArrayList<String> lines = new ArrayList<String>();
-            for (HashMap.Entry<String, ArrayList<PostingItem>> pair : _table.entrySet()) {
+            for (Map.Entry<String, ArrayList<PostingItem>> pair : _table.entrySet()) {
                 String word = pair.getKey();
                 ArrayList<PostingItem> postings = pair.getValue();
 
@@ -205,9 +207,10 @@ public class Helper {
         _myIpAddress = Utilities.getMyIpAddress();
         _myPortNumber = Utilities.getMyPortNumber(serverSocket);
 
-        // TODO: Change the following to: read file to get name server's IP and Port #
-        _nameServerIpAddress = "127.0.0.1";
-        _nameServerPortNumber = 12345;
+        String[] lines = TextFile.read("name_server_info");
+        _nameServerIpAddress = lines[0];
+        _nameServerPortNumber = Integer.parseInt(lines[1]);
+
         Console.writeLine("A helper is running on " + _myIpAddress + " at port " + _myPortNumber + "\n");
 
         _category = register();
@@ -276,7 +279,6 @@ public class Helper {
             try {
                 while (true) {
 
-                    // TODO: talk to name server
                     Socket socketToNameServer = new Socket(_nameServerIpAddress, _nameServerPortNumber);
                     TcpMessenger messenger = new TcpMessenger(socketToNameServer);
 
@@ -342,7 +344,7 @@ public class Helper {
 
                 HashMap<String, Integer> counts = mapping(TextFile.read(pathToSeg));
                 ArrayList<String> linesForOutput = new ArrayList<String>();
-                for (HashMap.Entry<String, Integer> pair : counts.entrySet()) {
+                for (Map.Entry<String, Integer> pair : counts.entrySet()) {
                     linesForOutput.add(pair.getKey() + "," + pair.getValue());
                 }
 

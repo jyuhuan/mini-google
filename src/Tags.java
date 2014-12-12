@@ -21,5 +21,8 @@ public class Tags {
     public static final int MESSAGE_HELPER_ALIVE = 10;
 
     public static final int MESSAGE_INDEXING_DONE = 11;
+    public static final int INDEXING_FAIL = 12;
+    public static final int SEARCHING_FAIL = 13;
+    public static final int SEARCHING_DONE = 14;
 
 }

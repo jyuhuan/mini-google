@@ -79,66 +79,7 @@ public class MiniGoogleUtilities {
         return categories;
     }
 
-    /*public static ArrayList<String> generateCategories() {
-        if (categories != null) return categories;
-
-        HashMap<String, Integer> sizes = new HashMap<String, Integer>() {};
-        sizes.put("s", 56);
-        sizes.put("c", 50);
-        sizes.put("p", 40);
-        sizes.put("b", 32);
-        sizes.put("d", 31);
-        sizes.put("a", 31);
-        sizes.put("m", 28);
-        sizes.put("t", 27);
-        sizes.put("r", 26);
-        sizes.put("f", 25);
-        sizes.put("e", 22);
-        sizes.put("i", 21);
-        sizes.put("h", 21);
-        sizes.put("l", 19);
-        sizes.put("g", 18);
-        sizes.put("w", 17);
-        sizes.put("u", 15);
-        sizes.put("o", 13);
-        sizes.put("v", 12);
-        sizes.put("n", 11);
-        sizes.put("j", 5);
-        sizes.put("#", 4);
-        sizes.put("k", 4);
-        sizes.put("q", 3);
-        sizes.put("y", 2);
-        sizes.put("x", 2);
-        sizes.put("z", 1);
-
-        ArrayList<String> categories = new ArrayList<String>();
-        for (HashMap.Entry<String, Integer> entry : sizes.entrySet()) {
-            String item = entry.getKey();
-            int count = entry.getValue();
-            for (int i = 0; i < count; i++) {
-                categories.add(item + i);
-            }
-        }
-
-        return categories;
-    }*/
-
-    /*public static ArrayList<String> generateCategories() {
-        if (categories != null) return categories;
-
-        categories = new ArrayList<String>();
-        for (Character character : "abcdefghijklmnopqrstuvwxyz0123456789#".toCharArray()) {
-            categories.add(String.valueOf(character));
-        }
-        return categories;
-    }*/
-
-
-    public static boolean contains(String s, char c) {
-        return s.indexOf(c) >= 0;
-    }
-
-    public static String getCategoryOf(String word) {
+        public static String getCategoryOf(String word) {
         char firstLetter = word.charAt(0);
 
         if (contains("scp", firstLetter)) return "c1";
@@ -149,39 +90,76 @@ public class MiniGoogleUtilities {
         else return "UNK";
     }
 
-    /*public static String getCategoryOf(String word) {
+
+    public static boolean contains(String s, char c) {
+        return s.indexOf(c) >= 0;
+    }
+
+
+    /*public static ArrayList<String> generateCategories() {
+        if (categories != null) return categories;
+
+        categories = new ArrayList<String>();
+        for (Character character : "abcdefghijklmnopqrstuvwxyz#".toCharArray()) {
+            categories.add(String.valueOf(character));
+        }
+        return categories;
+    }
+
+    public static String getCategoryOf(String word) {
         char firstLetter = word.charAt(0);
         if ("abcdefghijklmnopqrstuvwxyz".indexOf(firstLetter) >= 0) return String.valueOf(firstLetter);
         else if ("0123456789".indexOf(firstLetter) >= 0) return "#";
         else return "UNK";
     }*/
 
-    public static ArrayList<ServerInfo> borrowCategorylessHelpers(int numHelpersNeeded) throws IOException {
+
+    public static ArrayList<ServerInfo> borrowCategorylessHelpers(int numHelpersNeeded, ServerInfo nameServerInfo) throws IOException {
         if (numHelpersNeeded == 0) return new ArrayList<ServerInfo>();
 
         // Contact name server, and borrow that many helpers.
-        Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
-        TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
-        messengerToNameServer.sendTag(Tags.REQUEST_CATEGORYLESS_HELPER);
-        messengerToNameServer.sendInt(numHelpersNeeded);
-        return messengerToNameServer.receiveServerInfoArray();
+        try {
+            Socket socketToNameServer = new Socket(nameServerInfo.IPAddressString(), nameServerInfo.portNumber);
+            TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
+            messengerToNameServer.sendTag(Tags.REQUEST_CATEGORYLESS_HELPER);
+            messengerToNameServer.sendInt(numHelpersNeeded);
+            ArrayList<ServerInfo> result = messengerToNameServer.receiveServerInfoArray();
+            socketToNameServer.close();
+            return result;
+        }
+        catch (IOException e) {
+            return new ArrayList<ServerInfo>();
+        }
     }
 
-    public static ServerInfo borrowOneCategoriedHelper(String category) throws IOException {
+    public static ServerInfo borrowOneCategoriedHelper(String category, ServerInfo nameServerInfo) throws IOException {
         // Contact name server, and borrow that many helpers.
-        Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
-        TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
-        messengerToNameServer.sendTag(Tags.REQUEST_CATEGORY_HELPER);
-        messengerToNameServer.sendString(category);
-        return messengerToNameServer.receiveServerInfo();
+        try {
+            Socket socketToNameServer = new Socket(nameServerInfo.IPAddressString(), nameServerInfo.portNumber);
+            TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
+            messengerToNameServer.sendTag(Tags.REQUEST_CATEGORY_HELPER);
+            messengerToNameServer.sendString(category);
+            ServerInfo result = messengerToNameServer.receiveServerInfo();
+            socketToNameServer.close();
+            return result;
+        }
+        catch (IOException e) {
+            return ServerInfo.createFakeServer();
+        }
     }
 
-    public static ArrayList<ServerInfo> borrowASetOfReducingHelpers() throws IOException {
+    public static ArrayList<ServerInfo> borrowASetOfReducingHelpers(ServerInfo nameServerInfo) throws IOException {
         // Contact name server, and borrow that many helpers.
-        Socket socketToNameServer = new Socket("127.0.0.1", 12345); // TODO: change this hardcoded IP and Port# to file reading.
-        TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
-        messengerToNameServer.sendTag(Tags.REQUEST_A_SET_OF_CATEGORY_HELPER);
-        return messengerToNameServer.receiveServerInfoArray();
+        try {
+            Socket socketToNameServer = new Socket(nameServerInfo.IPAddressString(), nameServerInfo.portNumber);
+            TcpMessenger messengerToNameServer = new TcpMessenger(socketToNameServer);
+            messengerToNameServer.sendTag(Tags.REQUEST_A_SET_OF_CATEGORY_HELPER);
+            ArrayList<ServerInfo> result = messengerToNameServer.receiveServerInfoArray();
+            socketToNameServer.close();
+            return result;
+        } catch (IOException e) {
+            return new ArrayList<ServerInfo>();
+        }
     }
 
 
