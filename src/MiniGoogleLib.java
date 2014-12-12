@@ -5,6 +5,7 @@
 
 import javafx.geometry.Pos;
 import me.yuhuan.collections.Pair;
+import me.yuhuan.io.TextFile;
 import me.yuhuan.net.core.TcpMessenger;
 import me.yuhuan.utilities.Console;
 import me.yuhuan.utilities.UidGenerator;
@@ -25,9 +26,12 @@ public class MiniGoogleLib {
     static String _miniGoogleIp;
     static int _miniGooglePort;
 
+
     public static void requestIndexing(String path) throws IOException {
-        _miniGoogleIp = "127.0.0.1";
-        _miniGooglePort = 5555;
+
+        String[] lines = TextFile.read("mini_google_server_info");
+        _miniGoogleIp = lines[0];
+        _miniGooglePort = Integer.parseInt(lines[1]);
 
         Socket socket = new Socket(_miniGoogleIp, _miniGooglePort);
         TcpMessenger messenger = new TcpMessenger(socket);
@@ -37,11 +41,13 @@ public class MiniGoogleLib {
 
         int transactionId = UidGenerator.next();
         messenger.sendInt(transactionId);
+
     }
 
     public static HashMap<String, ArrayList<Helper.PostingItem>> requestSearching(String[] keywords) throws IOException {
-        _miniGoogleIp = "127.0.0.1";
-        _miniGooglePort = 5555;
+        String[] lines = TextFile.read("mini_google_server_info");
+        _miniGoogleIp = lines[0];
+        _miniGooglePort = Integer.parseInt(lines[1]);
 
         Socket socket = new Socket(_miniGoogleIp, _miniGooglePort);
         TcpMessenger messenger = new TcpMessenger(socket);

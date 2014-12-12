@@ -4,10 +4,8 @@
  */
 
 import me.yuhuan.io.Directory;
-import me.yuhuan.net.core.TcpMessenger;
 import me.yuhuan.utilities.Console;
 
-import java.net.Socket;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -56,18 +54,14 @@ public class DemoProgram {
                     MiniGoogleLib.requestIndexing(path);
                     Thread.sleep(600);
                 }
-
             }
             else {
                 Console.writeLine("Please only choose from the options listed. ");
             }
 
-
             Console.writeLine("Hit ENTER to return to main menu. Press Ctrl+C to quit. ");
             String s = Console.readLine();
 
         }
-
     }
-
 }

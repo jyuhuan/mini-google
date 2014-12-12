@@ -3,8 +3,8 @@
  * International License (http://creativecommons.org/licenses/by-nc-nd/4.0/).
  */
 
-import me.yuhuan.collections.Pair;
 import me.yuhuan.io.Directory;
+import me.yuhuan.io.TextFile;
 import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
 import me.yuhuan.net.core.TcpMessenger;
@@ -31,7 +31,7 @@ public class MiniGoogleServer {
     /**
      * The port number that the server socket listens to.
      */
-    static final int PORT = 5555; // TODO: change this to 0.
+    static final int PORT = 0;
 
     /**
      * The directory that all mappers should output to. Structure of this directory:
@@ -54,6 +54,9 @@ public class MiniGoogleServer {
 
         // Prompt to the command line the IP and port number of this server.
         Console.writeLine("I am running on " + myIpAddress + ", at port " + myPortNumber);
+
+        TextFile.write("mini_google_server_info", new String[]{ myIpAddress, String.valueOf(myPortNumber) });
+
 
         try {
             while (true) {
@@ -301,8 +304,10 @@ public class MiniGoogleServer {
                     }
                 }
 
-                Console.writeLine("Reducing done... \n");
+                // delete all intermediate results in this transaction
+                Directory.removeDirectory(MAPPER_OUT_DIR + _transactionId);
 
+                Console.writeLine("Reducing done... \n");
 
             }
             catch (IOException e) {

@@ -33,4 +33,12 @@ public class Directory {
     public static Boolean createDirectory(String pathToDirectory) {
         return (new File(pathToDirectory)).mkdir();
     }
+
+    public static void removeDirectory(String pathToDirectory) {
+        ArrayList<String> files = getFiles(pathToDirectory);
+        for (String file : files) {
+            me.yuhuan.io.File.deleteFile(file);
+        }
+        me.yuhuan.io.File.deleteFile(pathToDirectory);
+    }
 }

@@ -13,4 +13,9 @@ public class File {
         java.io.File f = new java.io.File(path);
         return f.getName();
     }
+
+    public static void deleteFile(String path) {
+        java.io.File file = new java.io.File(path);
+        if (file.exists()) file.delete();
+    }
 }
