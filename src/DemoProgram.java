@@ -6,6 +6,7 @@
 import me.yuhuan.io.Directory;
 import me.yuhuan.utilities.Console;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -15,6 +16,31 @@ import java.util.Map;
  */
 public class DemoProgram {
 
+
+    public static class SearchingWorker extends Thread {
+
+        String[] _keywords;
+
+        public SearchingWorker(String[] keywords) {
+            _keywords = keywords;
+        }
+
+        public void run() {
+            try {
+
+                HashMap<String, ArrayList<Helper.PostingItem>> result = MiniGoogleLib.requestSearching(_keywords);
+
+                for (Map.Entry<String, ArrayList<Helper.PostingItem>> entry : result.entrySet()) {
+                    String keyword = entry.getKey();
+                    Console.writeLine("Result for word \"" + keyword + "\":");
+                    for (Helper.PostingItem item : entry.getValue()) {
+                        Console.writeLine("  | " + item.getDocumentName());
+                    }
+                }
+            } catch (IOException e) { }
+            Console.writeLine("Searching for " + _keywords.toString() + "done. ");
+        }
+    }
 
 
     public static void main(String[] args) throws Exception {
@@ -50,6 +76,15 @@ public class DemoProgram {
             }
             else if (userChoice == 3) {
                 Console.writeLine("Indexing all documents");
+                ArrayList<String> paths = Directory.getDirectories("working/parts");
+
+                for (String path : paths) {
+                    MiniGoogleLib.requestIndexing(path);
+                    Thread.sleep(600);
+                }
+            }
+            else if (userChoice == 4) {
+                Console.writeLine("Indexing three documents");
                 ArrayList<String> paths = Directory.getDirectories("working/parts");
 
                 for (String path : paths) {

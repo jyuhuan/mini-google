@@ -15,7 +15,7 @@ package me.yuhuan.utilities;
  */
 public class UidGenerator {
     private static Integer _id;
-    public static int next() {
+    public synchronized static int next() {
         if (_id == null) {
             _id = 0;
         }

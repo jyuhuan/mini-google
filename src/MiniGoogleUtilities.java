@@ -68,7 +68,7 @@ public class MiniGoogleUtilities {
         return parts[parts.length - 1];
     }
 
-    public static ArrayList<String> generateCategories() {
+    /*public static ArrayList<String> generateCategories() {
         if (categories != null) return categories;
         categories = new ArrayList<String>();
         categories.add("c1");
@@ -88,7 +88,7 @@ public class MiniGoogleUtilities {
         else if (contains("wuovnjkqyxz", firstLetter)) return "c4";
         else if (contains("0123456789", firstLetter)) return "#";
         else return "UNK";
-    }
+    }*/
 
 
     public static boolean contains(String s, char c) {
@@ -96,7 +96,7 @@ public class MiniGoogleUtilities {
     }
 
 
-    /*public static ArrayList<String> generateCategories() {
+    public static ArrayList<String> generateCategories() {
         if (categories != null) return categories;
 
         categories = new ArrayList<String>();
@@ -107,11 +107,16 @@ public class MiniGoogleUtilities {
     }
 
     public static String getCategoryOf(String word) {
-        char firstLetter = word.charAt(0);
-        if ("abcdefghijklmnopqrstuvwxyz".indexOf(firstLetter) >= 0) return String.valueOf(firstLetter);
-        else if ("0123456789".indexOf(firstLetter) >= 0) return "#";
-        else return "UNK";
-    }*/
+        try {
+            char firstLetter = word.charAt(0);
+            if ("abcdefghijklmnopqrstuvwxyz".indexOf(firstLetter) >= 0) return String.valueOf(firstLetter);
+            else if ("0123456789".indexOf(firstLetter) >= 0) return "#";
+            else return "UNK";
+        }
+        catch (Exception e) {
+            return "UNK";
+        }
+    }
 
 
     public static ArrayList<ServerInfo> borrowCategorylessHelpers(int numHelpersNeeded, ServerInfo nameServerInfo) throws IOException {

@@ -137,7 +137,7 @@ public class NameServer {
          */
         public synchronized ServerInfo borrowHelper(String category) {
             int lowestLoad = Integer.MAX_VALUE;
-            ServerInfo mostIdle = null;
+            ServerInfo mostIdle = _table.get(category).get(0).item1;
             for (Pair<ServerInfo, Integer> pair : _table.get(category)) {
                 ServerInfo serverInfo = pair.item1;
                 int load = pair.item2;

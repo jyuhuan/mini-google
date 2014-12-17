@@ -142,7 +142,8 @@ public class Helper {
                 StringBuilder stringBuilder = new StringBuilder();
                 stringBuilder.append(word);
                 stringBuilder.append(",");
-                for (PostingItem posting : postings) {
+                for (int i = 0; i < postings.size(); i++) {
+                    PostingItem posting = postings.get(i);
                     stringBuilder.append(posting.getDocumentName());
                     stringBuilder.append("|");
                     stringBuilder.append(posting.getFrequency());

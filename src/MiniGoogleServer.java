@@ -9,6 +9,7 @@ import me.yuhuan.net.Utilities;
 import me.yuhuan.net.core.ServerInfo;
 import me.yuhuan.net.core.TcpMessenger;
 import me.yuhuan.utilities.Console;
+import me.yuhuan.utilities.UidGenerator;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -191,6 +192,7 @@ public class MiniGoogleServer {
 
                 // Second parameter: transaction ID. This is used to create the directory of partial results.
                 _transactionId = messengerToRequester.receiveInt();
+                _transactionId = UidGenerator.next();
 
                 // Create directory for the mappers to output the partial result to.
                 Directory.createDirectory(MAPPER_OUT_DIR + _transactionId);
